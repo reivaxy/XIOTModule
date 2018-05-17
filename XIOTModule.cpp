@@ -11,7 +11,18 @@ const char* XIOTModuleJsonTag::homeWifiConnected = "homeWifiConnected";
 const char* XIOTModuleJsonTag::gsmEnabled = "gsmEnabled";
 const char* XIOTModuleJsonTag::timeInitialized = "timeInitialized";
 
+/**
+ * This constructor is used by master iotinator, just to take advantage of
+ * some methods available here.
+ * Later, this class will be able to handle STA_AP
+ */
+XIOTModule::XIOTModule() {
+  _initServer();
+}
 
+/**
+ * This constructor is used by slave modules that take full advantage of this class
+ */
 XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl) {
   _config = config;
   Serial.print("Initializing module ");
@@ -31,8 +42,13 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
     XUtils::stringToCharP(ipInfo.ip.toString(), &_localIP);
     Serial.printf("Got IP on %s: %s\n", _config->getSsid(), _localIP);
     _wifiConnected = true;
-    _canGet = true;  // Can't perform an http get from within the handler, it fails...
+    _canQueryMasterConfig = true;  // Can't perform an http get from within the handler, it fails...
     _wifiDisplay();
+    
+    // If connected to the customized SSID, module can register itself to master
+    if(strcmp(DEFAULT_APPWD, _config->getPwd()) != 0) {
+      _canRegister = true;
+    }
   }); 
   
   _wifiSTADisconnectedHandler = WiFi.onStationModeDisconnected([&](WiFiEventStationModeDisconnected event) {
@@ -65,6 +81,8 @@ void XIOTModule::_initServer() {
  * Connects to the SSID read in config
  */
 void XIOTModule::_connectSTA() {
+  _canQueryMasterConfig = false;
+  _canRegister = false;
   Debug("XIOTModule::_connectSTA\n");
   WiFi.begin(_config->getSsid(), _config->getPwd());
   _wifiDisplay();
@@ -98,19 +116,25 @@ void XIOTModule::_getConfigFromMaster() {
       _config->setPwd(pwd);
       _config->saveToEeprom();
       _connectSTA();
+      
     }
   }    
 }
+
+void XIOTModule::_register() {
+  int httpCode;
+  masterAPIPost("/api/register", "{toto}", &httpCode);
+  Serial.println(httpCode);
+}
+
 /**
  * Make a GET request to the master 
- * Returns json
+ * Returns received json
  */
 JsonObject& XIOTModule::masterAPIGet(const char* path, int* httpCode) {
   Debug("XIOTModule::masterAPIGet\n");
   HTTPClient http;
   String masterIP = WiFi.gatewayIP().toString();
-  Serial.print("MASTER IP: ");
-  Serial.println(masterIP);
   http.begin(masterIP, 80, path);
   *httpCode = http.GET();
   if(*httpCode <= 0) {
@@ -124,6 +148,26 @@ JsonObject& XIOTModule::masterAPIGet(const char* path, int* httpCode) {
   JsonObject& root = jsonBuffer.parseObject(jsonResultStr);
   return root;
 }
+
+JsonObject& XIOTModule::masterAPIPost(const char* path, String payload, int* httpCode) {
+  Debug("XIOTModule::masterAPIPost\n");
+  HTTPClient http;
+  String masterIP = WiFi.gatewayIP().toString();
+  http.begin(masterIP, 80, path);
+  *httpCode = http.POST(payload);
+  if(*httpCode <= 0) {
+    Serial.printf("HTTP POST failed, error: %s\n", http.errorToString(*httpCode).c_str());
+    return JsonObject::invalid();
+  }
+  String jsonResultStr = http.getString();
+  http.end();
+  Serial.println(jsonResultStr);
+  // TODO: 1000 ? make sure it's ok
+  StaticJsonBuffer<1000> jsonBuffer; 
+  JsonObject& root = jsonBuffer.parseObject(jsonResultStr);
+  return root;
+}
+
 
 void XIOTModule::_initDisplay(int displayAddr, int displaySda, int displayScl) {
   Debug("XIOTModule::_initDisplay\n");
@@ -170,6 +214,11 @@ void XIOTModule::_wifiDisplay() {
   _oledDisplay->wifiIcon(blinkWifi, wifiType);
 }
 
+/**
+ * This method MUST be called in your sketch main loop method
+ * to properly handle clock, display, server
+ * Or you need to handle these by yourself. 
+ */
 void XIOTModule::refresh() {
   now(); // Needed to update the clock from the TimeLib library
   // (and used by NTP library)
@@ -179,11 +228,15 @@ void XIOTModule::refresh() {
  
   unsigned int timeNow = millis();
   // Should we get the config from master ?
-  if(_wifiConnected && _canGet) {
+  if(_wifiConnected && _canQueryMasterConfig) {
     _timeLastGet = timeNow;
-    _canGet = false;
+    _canQueryMasterConfig = false;
     _getConfigFromMaster();
   }
+  if(_wifiConnected && _canRegister) {
+    _register(); 
+    _canRegister = false;
+  } 
   
   // Time on display should be refreshed every second
   // Intentionnally not using the value returned by now(), since it changes
@@ -197,19 +250,17 @@ void XIOTModule::refresh() {
   _oledDisplay->refresh();    
 }
 
-// Needed ? May be not.
 void XIOTModule::sendHtml(const char* html, int code) {
-  char format[] = "<html><body>%s</body></html>";
-  char* page = (char*)malloc(strlen(html) + strlen(format) + 1);
-  sprintf(page, format, html);
+  _server->sendHeader("Connection", "close");
   _server->send(code, "text/html", html);
-  free(page); 
 }
 
-void XIOTModule::sendJson(const char* msg, int code) {
-  _server->send(code, "application/json", msg);
+void XIOTModule::sendJson(const char* jsonText, int code) {
+  _server->sendHeader("Connection", "close");
+  _server->send(code, "application/json", jsonText);
 }
 void XIOTModule::sendText(const char* msg, int code) {
+  _server->sendHeader("Connection", "close");
   _server->send(code, "text/plain", msg);
 }
 
