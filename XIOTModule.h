@@ -39,19 +39,24 @@ public:
   XIOTModule(ModuleConfigClass* config, int addr, int sda, int scl);
   void refresh();
   DisplayClass* getDisplay();
+  ESP8266WebServer* getServer();
   JsonObject& masterAPIGet(const char* path, int* httpCode);  
-  
+  void sendText(const char* msg, int code);
+  void sendHtml(const char* msg, int code);
+  void sendJson(const char* msg, int code);
   
 protected:
   void _connectSTA();  
 
   void _initDisplay(int displayAddr, int displaySda, int displayScl);
+  void _initServer();
   void _timeDisplay();
   void _wifiDisplay();
   void _getConfigFromMaster();
   
   ModuleConfigClass* _config;
   DisplayClass* _oledDisplay;
+  ESP8266WebServer* _server;
   WiFiEventHandler _wifiSTAGotIpHandler, _wifiSTADisconnectedHandler;
   unsigned int _timeLastTimeDisplay = 0;
   unsigned int _timeLastGet = 0;

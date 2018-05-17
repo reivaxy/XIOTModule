@@ -19,6 +19,9 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
     
   // Initialise the OLED display
   _initDisplay(displayAddr, displaySda, displayScl);
+  
+  // Initialize the web server for the API
+  _initServer();
     
   // Module is Wifi Station only
   WiFi.mode(WIFI_STA);
@@ -42,6 +45,20 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
     }
   });
   _connectSTA();
+}
+
+ESP8266WebServer* XIOTModule::getServer() {
+  return _server;
+}
+
+void XIOTModule::_initServer() {
+  _server = new ESP8266WebServer(80);
+  
+  _server->on("/api/ping", [&](){
+    sendText("pong", 200);
+  });
+  
+  _server->begin();
 }
 
 /**
@@ -154,33 +171,46 @@ void XIOTModule::_wifiDisplay() {
 }
 
 void XIOTModule::refresh() {
-  // Check if any request to serve
-//  server.handleClient();  
-
   now(); // Needed to update the clock from the TimeLib library
   // (and used by NTP library)
-  
-  // Display needs to be refreshed continuously (for blinking, ...)
-  _oledDisplay->refresh();   
-  
-  // Time on display should be refreshed every second
-  // Intentionnally not using the value returned by now(), since it changes
-  // when time is set.
+      
+  // Check if any request to serve
+  _server->handleClient();  
+ 
   unsigned int timeNow = millis();
-  if(timeNow - _timeLastTimeDisplay >= 1000) {
-    _timeLastTimeDisplay = timeNow;
-    _timeDisplay();
-  }
- 
- 
   // Should we get the config from master ?
   if(_wifiConnected && _canGet) {
     _timeLastGet = timeNow;
     _canGet = false;
     _getConfigFromMaster();
   }
+  
+  // Time on display should be refreshed every second
+  // Intentionnally not using the value returned by now(), since it changes
+  // when time is set.
+  if(timeNow - _timeLastTimeDisplay >= 1000) {
+    _timeLastTimeDisplay = timeNow;
+    _timeDisplay();
+  }
+ 
+  // Display needs to be refreshed continuously (for blinking, ...)
+  _oledDisplay->refresh();    
+}
 
-    
+// Needed ? May be not.
+void XIOTModule::sendHtml(const char* html, int code) {
+  char format[] = "<html><body>%s</body></html>";
+  char* page = (char*)malloc(strlen(html) + strlen(format) + 1);
+  sprintf(page, format, html);
+  _server->send(code, "text/html", html);
+  free(page); 
+}
+
+void XIOTModule::sendJson(const char* msg, int code) {
+  _server->send(code, "application/json", msg);
+}
+void XIOTModule::sendText(const char* msg, int code) {
+  _server->send(code, "text/plain", msg);
 }
 
 
