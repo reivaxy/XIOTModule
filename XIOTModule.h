@@ -42,7 +42,7 @@ public:
 
 class XIOTModule {
 public:
-  XIOTModule();
+  XIOTModule(DisplayClass *display);
   XIOTModule(ModuleConfigClass* config, int addr, int sda, int scl);
   void refresh();
   DisplayClass* getDisplay();

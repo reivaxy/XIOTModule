@@ -16,9 +16,10 @@ const char* XIOTModuleJsonTag::slaveIP = "slaveIP";
 /**
  * This constructor is used by master iotinator, just to take advantage of
  * some methods available here.
- * Later, this class will be able to handle STA_AP
+ * Later, the class will be able to handle STA_AP
  */
-XIOTModule::XIOTModule() {
+XIOTModule::XIOTModule(DisplayClass *display) {
+  _oledDisplay = display;
   _initServer();
 }
 
@@ -73,14 +74,33 @@ void XIOTModule::_initServer() {
   _server = new ESP8266WebServer(80);
   
   _server->on("/api/ping", [&](){
-    sendJson({}, 200);   // HTTP code 200 is enough
+    sendJson("{}", 200);   // HTTP code 200 is enough
   });
 
   _server->on("/reset", [&](){
     Serial.println("Rq on /reset XIOTModule");
     _config->initFromDefault();
     _config->saveToEeprom();
-    sendJson({}, 200);   // HTTP code 200 is enough 
+    sendJson("{}", 200);   // HTTP code 200 is enough 
+  });
+
+  _server->on("/api/rename", [&](){
+    Serial.println("Renaming");
+    String jsonBody = _server->arg("plain");
+    char message[100];
+    StaticJsonBuffer<100> jsonBuffer; 
+    JsonObject& root = jsonBuffer.parseObject(jsonBody); 
+    if (!root.success()) {
+      Serial.println("Renaming failure");
+      sendJson("{}", 500);
+      _oledDisplay->setLine(1, "Renaming failed", TRANSIENT, NOT_BLINKING);
+      return;
+    }
+    Serial.printf("Renaming to %s\n", (const char*)root["name"] ); 
+    _config->setName((const char*)root["name"]);
+    _config->saveToEeprom(); // TODO: partial save !!   
+    _oledDisplay->setTitle(_config->getName());
+    sendJson("{}", 200);   // HTTP code 200 is enough
   });
     
   _server->begin();
@@ -187,7 +207,7 @@ JsonObject& XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode) {
   StaticJsonBuffer<1000> jsonBuffer; 
   JsonObject& root = jsonBuffer.parseObject(jsonResultStr);
   if(!root.success()) {
-    Serial.println("Json parsing failure");
+    Serial.println("XIOTModule::APIGet Json parsing failure");
   }
   return root;
 }
@@ -222,7 +242,7 @@ JsonObject& XIOTModule::APIPost(String ipAddr, const char* path, String payload,
   StaticJsonBuffer<1000> jsonBuffer; 
   JsonObject& root = jsonBuffer.parseObject(jsonResultStr);
   if(!root.success()) {
-    Serial.println("Json parsing failure");
+    Serial.println("XIOTModule::APIPost Json parsing failure");
   }  
   return root;
 }
