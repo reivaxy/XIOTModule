@@ -42,7 +42,9 @@ public:
   DisplayClass* getDisplay();
   ESP8266WebServer* getServer();
   JsonObject& masterAPIGet(const char* path, int* httpCode);  
-  JsonObject& masterAPIPost(const char* path, String payload, int* httpCode);  
+  JsonObject& masterAPIPost(const char* path, String payload, int* httpCode);
+  JsonObject& APIGet(String ipAddr, const char* path, int* httpCode);  
+  JsonObject& APIPost(String ipAddr, const char* path, String payload, int* httpCode);  
   void sendText(const char* msg, int code);
   void sendHtml(const char* msg, int code);
   void sendJson(const char* msg, int code);

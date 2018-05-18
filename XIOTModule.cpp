@@ -121,21 +121,38 @@ void XIOTModule::_getConfigFromMaster() {
   }    
 }
 
+/**
+ * Register the module to the master.
+ * Send IP address, name, ...
+ */
 void XIOTModule::_register() {
   int httpCode;
-  masterAPIPost("/api/register", "{toto}", &httpCode);
+  char message[100];
+  // Simple payload for now, no need for ArduinoJson
+  sprintf(message, "{\"ip\":\"%s\",\"name\":\"%s\")", _localIP, _config->getName());  
+  masterAPIPost("/api/register", message, &httpCode);
   Serial.println(httpCode);
 }
 
+
 /**
- * Make a GET request to the master 
+ * Send a GET request to master 
  * Returns received json
  */
 JsonObject& XIOTModule::masterAPIGet(const char* path, int* httpCode) {
   Debug("XIOTModule::masterAPIGet\n");
-  HTTPClient http;
   String masterIP = WiFi.gatewayIP().toString();
-  http.begin(masterIP, 80, path);
+  return APIGet(masterIP, path, httpCode);
+}
+
+/**
+ * Send a GET request to given IP 
+ * Returns received json
+ */
+JsonObject& XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode) {
+  Debug("XIOTModule::APIGet\n");
+  HTTPClient http;
+  http.begin(ipAddr, 80, path);
   *httpCode = http.GET();
   if(*httpCode <= 0) {
     Serial.printf("HTTP GET failed, error: %s\n", http.errorToString(*httpCode).c_str());
@@ -149,11 +166,24 @@ JsonObject& XIOTModule::masterAPIGet(const char* path, int* httpCode) {
   return root;
 }
 
+/**
+ * Send a POST request to master 
+ * Returns received json
+ */
 JsonObject& XIOTModule::masterAPIPost(const char* path, String payload, int* httpCode) {
   Debug("XIOTModule::masterAPIPost\n");
-  HTTPClient http;
   String masterIP = WiFi.gatewayIP().toString();
-  http.begin(masterIP, 80, path);
+  return APIPost(masterIP, path, payload, httpCode);
+}
+
+/**
+ * Send a POST request to given IP 
+ * Returns received json
+ */
+JsonObject& XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* httpCode) {
+  Debug("XIOTModule::APIPost\n");
+  HTTPClient http;
+  http.begin(ipAddr, 80, path);
   *httpCode = http.POST(payload);
   if(*httpCode <= 0) {
     Serial.printf("HTTP POST failed, error: %s\n", http.errorToString(*httpCode).c_str());
@@ -162,7 +192,7 @@ JsonObject& XIOTModule::masterAPIPost(const char* path, String payload, int* htt
   String jsonResultStr = http.getString();
   http.end();
   Serial.println(jsonResultStr);
-  // TODO: 1000 ? make sure it's ok
+  // TODO: can size by dynamically computed ? or use a dynamic buffer ? 
   StaticJsonBuffer<1000> jsonBuffer; 
   JsonObject& root = jsonBuffer.parseObject(jsonResultStr);
   return root;
