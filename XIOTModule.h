@@ -4,6 +4,8 @@
  *  Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License
  */
 
+#pragma once
+
 #include <XIOTConfig.h>
 #include <XIOTDisplay.h>
 #include <ESP8266WiFi.h>
@@ -30,9 +32,13 @@ public:
   static const char* homeWifiConnected;
   static const char* gsmEnabled;
   static const char* timeInitialized;
+  static const char* name;
+  static const char* slaveIP;
 };
 
 #define CONFIG_PAYLOAD_SIZE 600
+#define IP_MAX_LENGTH 16
+#define DOUBLE_IP_MAX_LENGTH 32  // will be handy when slaves can also open AP
 
 class XIOTModule {
 public:
@@ -64,7 +70,8 @@ protected:
   ESP8266WebServer* _server;
   WiFiEventHandler _wifiSTAGotIpHandler, _wifiSTADisconnectedHandler;
   unsigned int _timeLastTimeDisplay = 0;
-  unsigned int _timeLastGet = 0;
+  unsigned int _timeLastRegister = 0;
+  unsigned int _timeLastGetConfig = 0;
   bool _wifiConnected = false;
   bool _canQueryMasterConfig = false;
   bool _canRegister = false;

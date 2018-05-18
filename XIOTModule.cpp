@@ -10,6 +10,8 @@ const char* XIOTModuleJsonTag::APPwd = "APPwd";
 const char* XIOTModuleJsonTag::homeWifiConnected = "homeWifiConnected";
 const char* XIOTModuleJsonTag::gsmEnabled = "gsmEnabled";
 const char* XIOTModuleJsonTag::timeInitialized = "timeInitialized";
+const char* XIOTModuleJsonTag::name = "name";
+const char* XIOTModuleJsonTag::slaveIP = "slaveIP";
 
 /**
  * This constructor is used by master iotinator, just to take advantage of
@@ -71,9 +73,16 @@ void XIOTModule::_initServer() {
   _server = new ESP8266WebServer(80);
   
   _server->on("/api/ping", [&](){
-    sendText("pong", 200);
+    sendJson({}, 200);   // HTTP code 200 is enough
   });
-  
+
+  _server->on("/reset", [&](){
+    Serial.println("Rq on /reset XIOTModule");
+    _config->initFromDefault();
+    _config->saveToEeprom();
+    sendJson({}, 200);   // HTTP code 200 is enough 
+  });
+    
   _server->begin();
 }
 
@@ -97,7 +106,13 @@ void XIOTModule::_getConfigFromMaster() {
   Debug("XIOTModule::_getConfigFromMaster\n");
   int httpCode = 0; 
   JsonObject& root = masterAPIGet("/api/config", &httpCode);
-  
+  if(httpCode == 200) {
+    _canQueryMasterConfig = false;
+  } else {
+    Serial.println("Registration failed");
+    return;
+  }
+    
   bool masterTimeInitialized = root[XIOTModuleJsonTag::timeInitialized];
   
   if(masterTimeInitialized) {
@@ -111,12 +126,12 @@ void XIOTModule::_getConfigFromMaster() {
   if(APInitialized) {
     const char *ssid = root[XIOTModuleJsonTag::APSsid];   
     const char *pwd = root[XIOTModuleJsonTag::APPwd];
+    // If AP not same as the one in config, save it
     if(strcmp(pwd, _config->getPwd()) != 0) {
       _config->setSsid(ssid);
       _config->setPwd(pwd);
-      _config->saveToEeprom();
-      _connectSTA();
-      
+      _config->saveToEeprom();     // TODO: partial save only !!!
+      _connectSTA();      
     }
   }    
 }
@@ -127,11 +142,19 @@ void XIOTModule::_getConfigFromMaster() {
  */
 void XIOTModule::_register() {
   int httpCode;
-  char message[100];
-  // Simple payload for now, no need for ArduinoJson
-  sprintf(message, "{\"ip\":\"%s\",\"name\":\"%s\")", _localIP, _config->getName());  
+  char message[101];
+  // TODO: Use dynamic buffer ?
+  StaticJsonBuffer<200> jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject(); 
+  root[XIOTModuleJsonTag::name] = _config->getName();
+  root[XIOTModuleJsonTag::slaveIP] = _localIP;
+  root.printTo(message, 100);
   masterAPIPost("/api/register", message, &httpCode);
-  Serial.println(httpCode);
+  if(httpCode == 200) {
+    _canRegister = false;
+  } else {
+    Serial.println("Registration failed");
+  } 
 }
 
 
@@ -163,6 +186,9 @@ JsonObject& XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode) {
   Serial.println(jsonResultStr);
   StaticJsonBuffer<1000> jsonBuffer; 
   JsonObject& root = jsonBuffer.parseObject(jsonResultStr);
+  if(!root.success()) {
+    Serial.println("Json parsing failure");
+  }
   return root;
 }
 
@@ -192,9 +218,12 @@ JsonObject& XIOTModule::APIPost(String ipAddr, const char* path, String payload,
   String jsonResultStr = http.getString();
   http.end();
   Serial.println(jsonResultStr);
-  // TODO: can size by dynamically computed ? or use a dynamic buffer ? 
+  // TODO: use a dynamic buffer ? 
   StaticJsonBuffer<1000> jsonBuffer; 
   JsonObject& root = jsonBuffer.parseObject(jsonResultStr);
+  if(!root.success()) {
+    Serial.println("Json parsing failure");
+  }  
   return root;
 }
 
@@ -258,14 +287,13 @@ void XIOTModule::refresh() {
  
   unsigned int timeNow = millis();
   // Should we get the config from master ?
-  if(_wifiConnected && _canQueryMasterConfig) {
-    _timeLastGet = timeNow;
-    _canQueryMasterConfig = false;
+  if(_wifiConnected && _canQueryMasterConfig && (timeNow - _timeLastGetConfig >= 5000)) {
+    _timeLastGetConfig = timeNow;
     _getConfigFromMaster();
   }
-  if(_wifiConnected && _canRegister) {
+  if(_wifiConnected && _canRegister && (timeNow - _timeLastRegister >= 5000)) {
+    _timeLastRegister = timeNow;
     _register(); 
-    _canRegister = false;
   } 
   
   // Time on display should be refreshed every second
