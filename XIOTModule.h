@@ -13,6 +13,7 @@
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
 #include <TimeLib.h>
+#include <XUtils.h>
 
 //#define DEBUG_XIOTMODULE // Uncomment this to enable debug messages over serial port
 
@@ -21,6 +22,17 @@
 #else
 #define Debug(...)
 #endif
+
+#define JSON_STRING_SMALL_SIZE 500
+#define JSON_STRING_MEDIUM_SIZE 3000
+#define JSON_STRING_BIG_SIZE 10000
+
+#define JSON_BUFFER_CONFIG_SIZE JSON_OBJECT_SIZE(20)
+#define JSON_STRING_CONFIG_SIZE 1000
+
+#define JSON_BUFFER_REGISTER_SIZE JSON_OBJECT_SIZE(20)
+#define JSON_STRING_REGISTER_SIZE 1000
+
 
 class XIOTModuleJsonTag {
 public:
@@ -34,6 +46,7 @@ public:
   static const char* timeInitialized;
   static const char* name;
   static const char* slaveIP;
+  static const char* canSleep;
 };
 
 #define CONFIG_PAYLOAD_SIZE 600
@@ -47,10 +60,12 @@ public:
   void refresh();
   DisplayClass* getDisplay();
   ESP8266WebServer* getServer();
-  JsonObject& masterAPIGet(const char* path, int* httpCode);  
-  JsonObject& masterAPIPost(const char* path, String payload, int* httpCode);
-  JsonObject& APIGet(String ipAddr, const char* path, int* httpCode);  
-  JsonObject& APIPost(String ipAddr, const char* path, String payload, int* httpCode);  
+  void masterAPIGet(const char* path, int* httpCode, char *jsonString, int maxLen);  
+  void masterAPIPost(const char* path, String payload, int* httpCode, char *jsonString = NULL, int maxLen = 0);
+  void APIGet(String ipAddr, const char* path, int* httpCode, char *jsonString, int maxLen);  
+  void APIGet(String ipAddr, const char* path, int* httpCode);  
+  void APIPost(String ipAddr, const char* path, String payload, int* httpCode, char *jsonString, int maxLen);  
+  void APIPost(String ipAddr, const char* path, String payload, int* httpCode);  
   void sendText(const char* msg, int code);
   void sendHtml(const char* msg, int code);
   void sendJson(const char* msg, int code);

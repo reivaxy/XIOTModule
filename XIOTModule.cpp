@@ -12,6 +12,7 @@ const char* XIOTModuleJsonTag::gsmEnabled = "gsmEnabled";
 const char* XIOTModuleJsonTag::timeInitialized = "timeInitialized";
 const char* XIOTModuleJsonTag::name = "name";
 const char* XIOTModuleJsonTag::slaveIP = "slaveIP";
+const char* XIOTModuleJsonTag::canSleep = "canSleep";
 
 /**
  * This constructor is used by master iotinator, just to take advantage of
@@ -124,8 +125,11 @@ DisplayClass* XIOTModule::getDisplay() {
 
 void XIOTModule::_getConfigFromMaster() {
   Debug("XIOTModule::_getConfigFromMaster\n");
-  int httpCode = 0; 
-  JsonObject& root = masterAPIGet("/api/config", &httpCode);
+  int httpCode = 0;
+  char jsonString[JSON_STRING_CONFIG_SIZE + 1]; 
+  masterAPIGet("/api/config", &httpCode, jsonString, JSON_STRING_CONFIG_SIZE);
+  StaticJsonBuffer<JSON_BUFFER_CONFIG_SIZE>  jsonBuffer;
+  JsonObject& root = jsonBuffer.parseObject(jsonString);
   if(httpCode == 200) {
     _canQueryMasterConfig = false;
   } else {
@@ -163,11 +167,14 @@ void XIOTModule::_getConfigFromMaster() {
 void XIOTModule::_register() {
   int httpCode;
   char message[101];
-  // TODO: Use dynamic buffer ?
+  // TODO: Use dynamic buffer ? Or at least compute estimated size using macro
   StaticJsonBuffer<200> jsonBuffer;
   JsonObject& root = jsonBuffer.createObject(); 
   root[XIOTModuleJsonTag::name] = _config->getName();
   root[XIOTModuleJsonTag::slaveIP] = _localIP;
+  // When implemented: return true if module uses sleep feature (battery)
+  // So that master won't ping
+  root[XIOTModuleJsonTag::canSleep] = false;
   root.printTo(message, 100);
   masterAPIPost("/api/register", message, &httpCode);
   if(httpCode == 200) {
@@ -182,69 +189,65 @@ void XIOTModule::_register() {
  * Send a GET request to master 
  * Returns received json
  */
-JsonObject& XIOTModule::masterAPIGet(const char* path, int* httpCode) {
+void XIOTModule::masterAPIGet(const char* path, int* httpCode, char *jsonString, int maxLen) {
   Debug("XIOTModule::masterAPIGet\n");
   String masterIP = WiFi.gatewayIP().toString();
-  return APIGet(masterIP, path, httpCode);
+  return APIGet(masterIP, path, httpCode, jsonString, maxLen);
 }
 
 /**
  * Send a GET request to given IP 
- * Returns received json
  */
-JsonObject& XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode) {
+void XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode) {
+  return APIGet(ipAddr, path, httpCode, NULL, 0);
+}
+void XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode, char *jsonString, int maxLen) {
   Debug("XIOTModule::APIGet\n");
   HTTPClient http;
   http.begin(ipAddr, 80, path);
   *httpCode = http.GET();
   if(*httpCode <= 0) {
     Serial.printf("HTTP GET failed, error: %s\n", http.errorToString(*httpCode).c_str());
-    return JsonObject::invalid();
+    return;
   }
   String jsonResultStr = http.getString();
   http.end();
-  Serial.println(jsonResultStr);
-  StaticJsonBuffer<1000> jsonBuffer; 
-  JsonObject& root = jsonBuffer.parseObject(jsonResultStr);
-  if(!root.success()) {
-    Serial.println("XIOTModule::APIGet Json parsing failure");
+  if(jsonString) {
+    strlcpy(jsonString, jsonResultStr.c_str(), maxLen);
   }
-  return root;
 }
 
 /**
  * Send a POST request to master 
  * Returns received json
  */
-JsonObject& XIOTModule::masterAPIPost(const char* path, String payload, int* httpCode) {
+void XIOTModule::masterAPIPost(const char* path, String payload, int* httpCode, char *jsonString, int maxLen) {
   Debug("XIOTModule::masterAPIPost\n");
   String masterIP = WiFi.gatewayIP().toString();
-  return APIPost(masterIP, path, payload, httpCode);
+  return APIPost(masterIP, path, payload, httpCode, jsonString, maxLen);
 }
 
 /**
  * Send a POST request to given IP 
  * Returns received json
  */
-JsonObject& XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* httpCode) {
+void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* httpCode) {
+  return APIPost(ipAddr, path, payload, httpCode, NULL, 0);
+}
+void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* httpCode, char *jsonString, int maxLen) {
   Debug("XIOTModule::APIPost\n");
   HTTPClient http;
   http.begin(ipAddr, 80, path);
   *httpCode = http.POST(payload);
   if(*httpCode <= 0) {
     Serial.printf("HTTP POST failed, error: %s\n", http.errorToString(*httpCode).c_str());
-    return JsonObject::invalid();
+    return;
   }
   String jsonResultStr = http.getString();
   http.end();
-  Serial.println(jsonResultStr);
-  // TODO: use a dynamic buffer ? 
-  StaticJsonBuffer<1000> jsonBuffer; 
-  JsonObject& root = jsonBuffer.parseObject(jsonResultStr);
-  if(!root.success()) {
-    Serial.println("XIOTModule::APIPost Json parsing failure");
-  }  
-  return root;
+  if(jsonString) {
+    strlcpy(jsonString, jsonResultStr.c_str(), maxLen);
+  }
 }
 
 
