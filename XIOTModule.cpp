@@ -12,7 +12,10 @@ const char* XIOTModuleJsonTag::gsmEnabled = "gsmEnabled";
 const char* XIOTModuleJsonTag::timeInitialized = "timeInitialized";
 const char* XIOTModuleJsonTag::name = "name";
 const char* XIOTModuleJsonTag::slaveIP = "slaveIP";
+const char* XIOTModuleJsonTag::MAC = "MAC";
 const char* XIOTModuleJsonTag::canSleep = "canSleep";
+const char* XIOTModuleJsonTag::uiClassName = "uiClassName";
+const char* XIOTModuleJsonTag::custom = "custom";
 
 /**
  * This constructor is used by master iotinator, just to take advantage of
@@ -25,7 +28,7 @@ XIOTModule::XIOTModule(DisplayClass *display) {
 }
 
 /**
- * This constructor is used by slave modules that take full advantage of this class
+ * This constructor is used only by slave modules that take full advantage of this class
  */
 XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl) {
   _config = config;
@@ -34,6 +37,12 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
     
   // Initialise the OLED display
   _initDisplay(displayAddr, displaySda, displayScl);
+  
+  if(config->getUiClassName()[0] == 0) {
+    Serial.println("No uiClassName !!");
+    _oledDisplay->setLine(2, "No uiClassName !", NOT_TRANSIENT, NOT_BLINKING);
+    _oledDisplay->alertIconOn(true);
+  }  
   
   // Initialize the web server for the API
   _initServer();
@@ -166,16 +175,32 @@ void XIOTModule::_getConfigFromMaster() {
  */
 void XIOTModule::_register() {
   int httpCode;
-  char message[101];
-  // TODO: Use dynamic buffer ? Or at least compute estimated size using macro
-  StaticJsonBuffer<200> jsonBuffer;
+  char message[JSON_STRING_CONFIG_SIZE];
+  char macAddrStr[100];
+  uint8_t macAddr[6];
+  WiFi.macAddress(macAddr);
+  sprintf(macAddrStr, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]);
+  
+  StaticJsonBuffer<JSON_BUFFER_CONFIG_SIZE> jsonBuffer;
   JsonObject& root = jsonBuffer.createObject(); 
   root[XIOTModuleJsonTag::name] = _config->getName();
   root[XIOTModuleJsonTag::slaveIP] = _localIP;
+  root[XIOTModuleJsonTag::MAC] = macAddrStr;
+  root[XIOTModuleJsonTag::uiClassName] = _config->getUiClassName();
   // When implemented: return true if module uses sleep feature (battery)
   // So that master won't ping
   root[XIOTModuleJsonTag::canSleep] = false;
-  root.printTo(message, 100);
+  
+  char *customPayload = _customRegistrationData();
+  if(customPayload != NULL) {
+    // Yes we add a string (could be some serialized JSON), that can be stored in master's slave collection
+    root[XIOTModuleJsonTag::custom] = customPayload;
+  }  
+  root.printTo(message, JSON_STRING_CONFIG_SIZE);
+  if(customPayload != NULL) {
+    free(customPayload);
+  }
+  //Serial.println(message);
   masterAPIPost("/api/register", message, &httpCode);
   if(httpCode == 200) {
     _canRegister = false;
@@ -184,6 +209,11 @@ void XIOTModule::_register() {
   } 
 }
 
+// This class should be overloaded in modules that need to provide custom info at registration time
+// Not sure yet there is a need for that... 
+char* XIOTModule::_customRegistrationData() {
+  return NULL;
+}
 
 /**
  * Send a GET request to master 

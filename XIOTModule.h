@@ -27,7 +27,7 @@
 #define JSON_STRING_MEDIUM_SIZE 3000
 #define JSON_STRING_BIG_SIZE 10000
 
-#define JSON_BUFFER_CONFIG_SIZE JSON_OBJECT_SIZE(20)
+#define JSON_BUFFER_CONFIG_SIZE JSON_OBJECT_SIZE(40)
 #define JSON_STRING_CONFIG_SIZE 1000
 
 #define JSON_BUFFER_REGISTER_SIZE JSON_OBJECT_SIZE(20)
@@ -46,12 +46,15 @@ public:
   static const char* timeInitialized;
   static const char* name;
   static const char* slaveIP;
+  static const char* MAC;
   static const char* canSleep;
+  static const char* uiClassName;
+  static const char* custom;
 };
 
-#define CONFIG_PAYLOAD_SIZE 600
 #define IP_MAX_LENGTH 16
 #define DOUBLE_IP_MAX_LENGTH 32  // will be handy when slaves can also open AP
+#define MAX_ADDR_MAX_LENGTH 18
 
 class XIOTModule {
 public:
@@ -79,6 +82,7 @@ protected:
   void _wifiDisplay();
   void _getConfigFromMaster();
   void _register();
+  virtual char* _customRegistrationData();
   
   ModuleConfigClass* _config;
   DisplayClass* _oledDisplay;
