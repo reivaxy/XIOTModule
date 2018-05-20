@@ -12,6 +12,7 @@
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
+#include <Arduino.h>
 #include <TimeLib.h>
 #include <XUtils.h>
 
@@ -23,6 +24,11 @@
 #define Debug(...)
 #endif
 
+// Max length authorized for modules custom data
+#define MAX_CUSTOM_DATA_SIZE 200
+// String used to replace a too long custom value
+#define CUSTOM_DATA_TOO_BIG_VALUE "CUSTOM_DATA_TOO_BIG_REMOVED"
+
 #define JSON_STRING_SMALL_SIZE 500
 #define JSON_STRING_MEDIUM_SIZE 3000
 #define JSON_STRING_BIG_SIZE 10000
@@ -31,7 +37,7 @@
 #define JSON_STRING_CONFIG_SIZE 1000
 
 #define JSON_BUFFER_REGISTER_SIZE JSON_OBJECT_SIZE(20)
-#define JSON_STRING_REGISTER_SIZE 1000
+#define JSON_STRING_REGISTER_SIZE 1000 + MAX_CUSTOM_DATA_SIZE
 
 
 class XIOTModuleJsonTag {
@@ -45,16 +51,17 @@ public:
   static const char* gsmEnabled;
   static const char* timeInitialized;
   static const char* name;
-  static const char* slaveIP;
+  static const char* ip;
   static const char* MAC;
   static const char* canSleep;
   static const char* uiClassName;
   static const char* custom;
+  static const char* pong;
 };
 
 #define IP_MAX_LENGTH 16
 #define DOUBLE_IP_MAX_LENGTH 32  // will be handy when slaves can also open AP
-#define MAX_ADDR_MAX_LENGTH 18
+#define MAC_ADDR_MAX_LENGTH 18
 
 class XIOTModule {
 public:

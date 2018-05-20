@@ -11,11 +11,12 @@ const char* XIOTModuleJsonTag::homeWifiConnected = "homeWifiConnected";
 const char* XIOTModuleJsonTag::gsmEnabled = "gsmEnabled";
 const char* XIOTModuleJsonTag::timeInitialized = "timeInitialized";
 const char* XIOTModuleJsonTag::name = "name";
-const char* XIOTModuleJsonTag::slaveIP = "slaveIP";
+const char* XIOTModuleJsonTag::ip = "slaveIP";
 const char* XIOTModuleJsonTag::MAC = "MAC";
 const char* XIOTModuleJsonTag::canSleep = "canSleep";
 const char* XIOTModuleJsonTag::uiClassName = "uiClassName";
 const char* XIOTModuleJsonTag::custom = "custom";
+const char* XIOTModuleJsonTag::pong = "pong";
 
 /**
  * This constructor is used by master iotinator, just to take advantage of
@@ -184,7 +185,7 @@ void XIOTModule::_register() {
   StaticJsonBuffer<JSON_BUFFER_CONFIG_SIZE> jsonBuffer;
   JsonObject& root = jsonBuffer.createObject(); 
   root[XIOTModuleJsonTag::name] = _config->getName();
-  root[XIOTModuleJsonTag::slaveIP] = _localIP;
+  root[XIOTModuleJsonTag::ip] = _localIP;
   root[XIOTModuleJsonTag::MAC] = macAddrStr;
   root[XIOTModuleJsonTag::uiClassName] = _config->getUiClassName();
   // When implemented: return true if module uses sleep feature (battery)
@@ -193,8 +194,13 @@ void XIOTModule::_register() {
   
   char *customPayload = _customRegistrationData();
   if(customPayload != NULL) {
-    // Yes we add a string (could be some serialized JSON), that can be stored in master's slave collection
-    root[XIOTModuleJsonTag::custom] = customPayload;
+    if(strlen(customPayload) < MAX_CUSTOM_DATA_SIZE) {
+      // Add a string (could be some serialized JSON), that can be stored in master's slave collection
+      root[XIOTModuleJsonTag::custom] = customPayload;
+    } else {
+      Serial.println("Custom data too big !");
+      root[XIOTModuleJsonTag::custom] = CUSTOM_DATA_TOO_BIG_VALUE;
+    }
   }  
   root.printTo(message, JSON_STRING_CONFIG_SIZE);
   if(customPayload != NULL) {
