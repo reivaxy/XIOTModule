@@ -70,8 +70,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
     if(_wifiConnected) {
       free(_localIP);
       Serial.printf("Lost connection to %s, error: %d\n", event.ssid.c_str(), event.reason);
-      _wifiConnected = false;
-      _wifiDisplay();
+      _connectSTA();
     }
   });
   _connectSTA();
@@ -102,7 +101,6 @@ void XIOTModule::_initServer() {
     StaticJsonBuffer<100> jsonBuffer; 
     JsonObject& root = jsonBuffer.parseObject(jsonBody); 
     if (!root.success()) {
-      Serial.println("Renaming failure");
       sendJson("{}", 500);
       _oledDisplay->setLine(1, "Renaming failed", TRANSIENT, NOT_BLINKING);
       return;
@@ -123,6 +121,7 @@ void XIOTModule::_initServer() {
 void XIOTModule::_connectSTA() {
   _canQueryMasterConfig = false;
   _canRegister = false;
+  _wifiConnected = false;
   Debug("XIOTModule::_connectSTA\n");
   WiFi.begin(_config->getSsid(), _config->getPwd());
   _wifiDisplay();
@@ -137,13 +136,14 @@ void XIOTModule::_getConfigFromMaster() {
   Debug("XIOTModule::_getConfigFromMaster\n");
   int httpCode = 0;
   char jsonString[JSON_STRING_CONFIG_SIZE + 1]; 
+  _oledDisplay->setLine(1, "Getting config...", TRANSIENT, NOT_BLINKING);
   masterAPIGet("/api/config", &httpCode, jsonString, JSON_STRING_CONFIG_SIZE);
   StaticJsonBuffer<JSON_BUFFER_CONFIG_SIZE>  jsonBuffer;
   JsonObject& root = jsonBuffer.parseObject(jsonString);
   if(httpCode == 200) {
     _canQueryMasterConfig = false;
   } else {
-    Serial.println("Registration failed");
+    _oledDisplay->setLine(1, "Getting config failed", TRANSIENT, NOT_BLINKING);
     return;
   }
     
@@ -181,7 +181,8 @@ void XIOTModule::_register() {
   uint8_t macAddr[6];
   WiFi.macAddress(macAddr);
   sprintf(macAddrStr, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]);
-  
+  _oledDisplay->setLine(1, "Registering", TRANSIENT, NOT_BLINKING);
+  _wifiDisplay();
   StaticJsonBuffer<JSON_BUFFER_CONFIG_SIZE> jsonBuffer;
   JsonObject& root = jsonBuffer.createObject(); 
   root[XIOTModuleJsonTag::name] = _config->getName();
@@ -198,7 +199,7 @@ void XIOTModule::_register() {
       // Add a string (could be some serialized JSON), that can be stored in master's slave collection
       root[XIOTModuleJsonTag::custom] = customPayload;
     } else {
-      Serial.println("Custom data too big !");
+      _oledDisplay->setLine(1, "Custom Data too big", TRANSIENT, NOT_BLINKING);
       root[XIOTModuleJsonTag::custom] = CUSTOM_DATA_TOO_BIG_VALUE;
     }
   }  
@@ -210,8 +211,9 @@ void XIOTModule::_register() {
   masterAPIPost("/api/register", message, &httpCode);
   if(httpCode == 200) {
     _canRegister = false;
+    _oledDisplay->setLine(1, "Registered", TRANSIENT, NOT_BLINKING);
   } else {
-    Serial.println("Registration failed");
+    _oledDisplay->setLine(1, "Registration failed", TRANSIENT, NOT_BLINKING);
   } 
 }
 
@@ -332,6 +334,21 @@ void XIOTModule::_wifiDisplay() {
   _oledDisplay->wifiIcon(blinkWifi, wifiType);
 }
 
+void XIOTModule::sendHtml(const char* html, int code) {
+  _server->sendHeader("Connection", "close");
+  _server->send(code, "text/html", html);
+}
+
+void XIOTModule::sendJson(const char* jsonText, int code) {
+  _server->sendHeader("Connection", "close");
+  _server->send(code, "application/json", jsonText);
+}
+void XIOTModule::sendText(const char* msg, int code) {
+  _server->sendHeader("Connection", "close");
+  _server->send(code, "text/plain", msg);
+}
+
+
 /**
  * This method MUST be called in your sketch main loop method
  * to properly handle clock, display, server
@@ -366,22 +383,6 @@ void XIOTModule::refresh() {
   // Display needs to be refreshed continuously (for blinking, ...)
   _oledDisplay->refresh();    
 }
-
-void XIOTModule::sendHtml(const char* html, int code) {
-  _server->sendHeader("Connection", "close");
-  _server->send(code, "text/html", html);
-}
-
-void XIOTModule::sendJson(const char* jsonText, int code) {
-  _server->sendHeader("Connection", "close");
-  _server->send(code, "application/json", jsonText);
-}
-void XIOTModule::sendText(const char* msg, int code) {
-  _server->sendHeader("Connection", "close");
-  _server->send(code, "text/plain", msg);
-}
-
-
 
 
 
