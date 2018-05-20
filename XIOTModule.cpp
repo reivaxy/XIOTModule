@@ -11,7 +11,7 @@ const char* XIOTModuleJsonTag::homeWifiConnected = "homeWifiConnected";
 const char* XIOTModuleJsonTag::gsmEnabled = "gsmEnabled";
 const char* XIOTModuleJsonTag::timeInitialized = "timeInitialized";
 const char* XIOTModuleJsonTag::name = "name";
-const char* XIOTModuleJsonTag::ip = "slaveIP";
+const char* XIOTModuleJsonTag::ip = "ip";
 const char* XIOTModuleJsonTag::MAC = "MAC";
 const char* XIOTModuleJsonTag::canSleep = "canSleep";
 const char* XIOTModuleJsonTag::uiClassName = "uiClassName";
@@ -95,7 +95,6 @@ void XIOTModule::_initServer() {
   });
 
   _server->on("/api/rename", [&](){
-    Serial.println("Renaming");
     String jsonBody = _server->arg("plain");
     char message[100];
     StaticJsonBuffer<100> jsonBuffer; 
@@ -105,7 +104,8 @@ void XIOTModule::_initServer() {
       _oledDisplay->setLine(1, "Renaming failed", TRANSIENT, NOT_BLINKING);
       return;
     }
-    Serial.printf("Renaming to %s\n", (const char*)root["name"] ); 
+    sprintf(message, "Renaming to %s\n", (const char*)root["name"] ); 
+    _oledDisplay->setLine(1, message, TRANSIENT, NOT_BLINKING);
     _config->setName((const char*)root["name"]);
     _config->saveToEeprom(); // TODO: partial save !!   
     _oledDisplay->setTitle(_config->getName());
