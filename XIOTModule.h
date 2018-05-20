@@ -15,6 +15,9 @@
 #include <Arduino.h>
 #include <TimeLib.h>
 #include <XUtils.h>
+extern "C" {
+  #include "user_interface.h"  // Allow getting heap size
+}
 
 //#define DEBUG_XIOTMODULE // Uncomment this to enable debug messages over serial port
 

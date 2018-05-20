@@ -70,6 +70,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
     if(_wifiConnected) {
       free(_localIP);
       Serial.printf("Lost connection to %s, error: %d\n", event.ssid.c_str(), event.reason);
+      _oledDisplay->setLine(1, "Disconnected", TRANSIENT, NOT_BLINKING);
       _connectSTA();
     }
   });
@@ -189,8 +190,10 @@ void XIOTModule::_register() {
   root[XIOTModuleJsonTag::ip] = _localIP;
   root[XIOTModuleJsonTag::MAC] = macAddrStr;
   root[XIOTModuleJsonTag::uiClassName] = _config->getUiClassName();
+  
   // When implemented: return true if module uses sleep feature (battery)
   // So that master won't ping
+  // TODO: handle this in config like getUiClassName
   root[XIOTModuleJsonTag::canSleep] = false;
   
   char *customPayload = _customRegistrationData();
