@@ -88,8 +88,8 @@ void XIOTModule::_initServer() {
     sendJson("{}", 200);   // HTTP code 200 is enough
   });
 
-  _server->on("/reset", [&](){
-    Serial.println("Rq on /reset XIOTModule");
+  _server->on("/api/moduleReset", [&](){
+    Serial.println("Rq on /api/moduleReset");
     _config->initFromDefault();
     _config->saveToEeprom();
     sendJson("{}", 200);   // HTTP code 200 is enough 
@@ -112,7 +112,7 @@ void XIOTModule::_initServer() {
     _oledDisplay->setTitle(_config->getName());
     sendJson("{}", 200);   // HTTP code 200 is enough
   });
-    
+     
   _server->begin();
 }
 
