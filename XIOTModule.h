@@ -60,6 +60,8 @@ public:
   static const char* uiClassName;
   static const char* custom;
   static const char* pong;
+  static const char* heap;
+  static const char* registeringTime;
 };
 
 #define IP_MAX_LENGTH 16
@@ -92,7 +94,7 @@ protected:
   void _wifiDisplay();
   void _getConfigFromMaster();
   void _register();
-  virtual char* _customRegistrationData();
+  virtual char* _customData();
   
   ModuleConfigClass* _config;
   DisplayClass* _oledDisplay;

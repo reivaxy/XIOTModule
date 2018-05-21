@@ -17,6 +17,8 @@ const char* XIOTModuleJsonTag::canSleep = "canSleep";
 const char* XIOTModuleJsonTag::uiClassName = "uiClassName";
 const char* XIOTModuleJsonTag::custom = "custom";
 const char* XIOTModuleJsonTag::pong = "pong";
+const char* XIOTModuleJsonTag::heap = "heap";
+const char* XIOTModuleJsonTag::registeringTime = "regTime";
 
 /**
  * This constructor is used by master iotinator, just to take advantage of
@@ -84,8 +86,24 @@ ESP8266WebServer* XIOTModule::getServer() {
 void XIOTModule::_initServer() {
   _server = new ESP8266WebServer(80);
   
-  _server->on("/api/ping", [&](){
-    sendJson("{}", 200);   // HTTP code 200 is enough
+  _server->on("/api/ping", [&]() {
+    uint32_t freeMem = system_get_free_heap_size();
+    Serial.printf("Free heap mem: %d\n", freeMem);  
+    const int bufferSize = JSON_OBJECT_SIZE(2);
+    StaticJsonBuffer<bufferSize> jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+    char *customData = _customData();
+    int payloadSize = 100;
+    if(customData) {
+      root[XIOTModuleJsonTag::custom] = customData ;
+      payloadSize += strlen(customData);      
+    }
+    char* payloadStr = (char *) malloc(payloadSize);
+    root[XIOTModuleJsonTag::heap] = freeMem;
+    root.printTo(payloadStr, payloadSize);
+    sendJson(payloadStr, 200);
+    free(customData);
+    free(payloadStr);    
   });
 
   _server->on("/api/moduleReset", [&](){
@@ -98,7 +116,8 @@ void XIOTModule::_initServer() {
   _server->on("/api/rename", [&](){
     String jsonBody = _server->arg("plain");
     char message[100];
-    StaticJsonBuffer<100> jsonBuffer; 
+    const int bufferSize = JSON_OBJECT_SIZE(1);
+    StaticJsonBuffer<bufferSize> jsonBuffer; 
     JsonObject& root = jsonBuffer.parseObject(jsonBody); 
     if (!root.success()) {
       sendJson("{}", 500);
@@ -143,6 +162,7 @@ void XIOTModule::_getConfigFromMaster() {
   JsonObject& root = jsonBuffer.parseObject(jsonString);
   if(httpCode == 200) {
     _canQueryMasterConfig = false;
+    _oledDisplay->setLine(1, "Got config", TRANSIENT, NOT_BLINKING);
   } else {
     _oledDisplay->setLine(1, "Getting config failed", TRANSIENT, NOT_BLINKING);
     return;
@@ -190,13 +210,16 @@ void XIOTModule::_register() {
   root[XIOTModuleJsonTag::ip] = _localIP;
   root[XIOTModuleJsonTag::MAC] = macAddrStr;
   root[XIOTModuleJsonTag::uiClassName] = _config->getUiClassName();
+  uint32_t freeMem = system_get_free_heap_size();
+  Serial.printf("Free heap mem: %d\n", freeMem);  
+  root[XIOTModuleJsonTag::heap] = freeMem;
   
   // When implemented: return true if module uses sleep feature (battery)
   // So that master won't ping
   // TODO: handle this in config like getUiClassName
   root[XIOTModuleJsonTag::canSleep] = false;
   
-  char *customPayload = _customRegistrationData();
+  char *customPayload = _customData();
   if(customPayload != NULL) {
     if(strlen(customPayload) < MAX_CUSTOM_DATA_SIZE) {
       // Add a string (could be some serialized JSON), that can be stored in master's slave collection
@@ -207,9 +230,8 @@ void XIOTModule::_register() {
     }
   }  
   root.printTo(message, JSON_STRING_CONFIG_SIZE);
-  if(customPayload != NULL) {
-    free(customPayload);
-  }
+  free(customPayload);
+
   //Serial.println(message);
   masterAPIPost("/api/register", message, &httpCode);
   if(httpCode == 200) {
@@ -222,7 +244,7 @@ void XIOTModule::_register() {
 
 // This class should be overloaded in modules that need to provide custom info at registration time
 // Not sure yet there is a need for that... 
-char* XIOTModule::_customRegistrationData() {
+char* XIOTModule::_customData() {
   return NULL;
 }
 
@@ -251,11 +273,11 @@ void XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode, char *js
     Serial.printf("HTTP GET failed, error: %s\n", http.errorToString(*httpCode).c_str());
     return;
   }
-  String jsonResultStr = http.getString();
-  http.end();
   if(jsonString) {
+    String jsonResultStr = http.getString();
     strlcpy(jsonString, jsonResultStr.c_str(), maxLen);
   }
+  http.end();
 }
 
 /**
@@ -284,11 +306,11 @@ void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* h
     Serial.printf("HTTP POST failed, error: %s\n", http.errorToString(*httpCode).c_str());
     return;
   }
-  String jsonResultStr = http.getString();
-  http.end();
   if(jsonString) {
+    String jsonResultStr = http.getString();
     strlcpy(jsonString, jsonResultStr.c_str(), maxLen);
   }
+  http.end();
 }
 
 
@@ -369,10 +391,14 @@ void XIOTModule::refresh() {
   if(_wifiConnected && _canQueryMasterConfig && (timeNow - _timeLastGetConfig >= 5000)) {
     _timeLastGetConfig = timeNow;
     _getConfigFromMaster();
+    _oledDisplay->refresh();
+    delay(300); // Otherwise message can't be read !
   }
   if(_wifiConnected && _canRegister && (timeNow - _timeLastRegister >= 5000)) {
     _timeLastRegister = timeNow;
     _register(); 
+    _oledDisplay->refresh();
+    delay(300); // Otherwise message can't be read !
   } 
   
   // Time on display should be refreshed every second
