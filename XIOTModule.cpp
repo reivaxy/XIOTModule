@@ -116,7 +116,7 @@ void XIOTModule::_initServer() {
   _server->on("/api/rename", [&](){
     String jsonBody = _server->arg("plain");
     char message[100];
-    const int bufferSize = JSON_OBJECT_SIZE(1);
+    const int bufferSize = 2* JSON_OBJECT_SIZE(1);
     StaticJsonBuffer<bufferSize> jsonBuffer; 
     JsonObject& root = jsonBuffer.parseObject(jsonBody); 
     if (!root.success()) {
