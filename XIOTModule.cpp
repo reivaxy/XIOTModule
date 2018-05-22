@@ -86,7 +86,7 @@ ESP8266WebServer* XIOTModule::getServer() {
 void XIOTModule::_initServer() {
   _server = new ESP8266WebServer(80);
   
-  _server->on("/api/ping", [&]() {
+  _server->on("/api/ping", HTTP_GET, [&]() {
     uint32_t freeMem = system_get_free_heap_size();
     Serial.printf("Free heap mem: %d\n", freeMem);  
     const int bufferSize = JSON_OBJECT_SIZE(2);
@@ -106,17 +106,18 @@ void XIOTModule::_initServer() {
     free(payloadStr);    
   });
 
-  _server->on("/api/moduleReset", [&](){
+  _server->on("/api/moduleReset", HTTP_GET, [&](){
     Serial.println("Rq on /api/moduleReset");
     _config->initFromDefault();
     _config->saveToEeprom();
     sendJson("{}", 200);   // HTTP code 200 is enough 
   });
 
-  _server->on("/api/rename", [&](){
+  _server->on("/api/rename", HTTP_POST, [&](){
     String jsonBody = _server->arg("plain");
     char message[100];
-    const int bufferSize = 2* JSON_OBJECT_SIZE(1);
+    // I've seen a few unexplained parsing error so I have set a bigger buffer size...
+    const int bufferSize = 2* JSON_OBJECT_SIZE(2);
     StaticJsonBuffer<bufferSize> jsonBuffer; 
     JsonObject& root = jsonBuffer.parseObject(jsonBody); 
     if (!root.success()) {
@@ -130,6 +131,43 @@ void XIOTModule::_initServer() {
     _config->saveToEeprom(); // TODO: partial save !!   
     _oledDisplay->setTitle(_config->getName());
     sendJson("{}", 200);   // HTTP code 200 is enough
+  });
+
+
+  // For now, process this request locally.
+  // Later it could have a header with the IP of the intended recipient and will need to be forwarded.
+  // Not sure it can work though
+  _server->on("/api/data", HTTP_GET, [&]() {
+    const int bufferSize = JSON_OBJECT_SIZE(2);
+    StaticJsonBuffer<bufferSize> jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+    char *customData = _customData();
+    int payloadSize = 100;
+    if(customData) {
+      root[XIOTModuleJsonTag::custom] = customData ;
+      payloadSize += strlen(customData);      
+    }
+    char* payloadStr = (char *) malloc(payloadSize);
+    root.printTo(payloadStr, payloadSize);
+    sendJson(payloadStr, 200);
+    free(customData);
+    free(payloadStr);    
+  });
+  
+  // For now, process this request locally.
+  // Later it could have a header with the IP of the intended recipient and will need to be forwarded.
+  // Not sure it can work though     
+  _server->on("/api/data", HTTP_POST, [&]() {
+    String body = _server->arg("plain");
+    Serial.println("XIOT");
+    Serial.println(body);
+    int httpCode;
+    char *bodyStr;
+    XUtils::stringToCharP(body, &bodyStr);
+    char *response = useData(bodyStr, &httpCode);  // Each module subclass should override this if it expects any data from the UI.
+    free(bodyStr);
+    sendJson(response, httpCode);
+    free(response);        
   });
      
   _server->begin();
@@ -242,12 +280,25 @@ void XIOTModule::_register() {
   } 
 }
 
-// This class should be overloaded in modules that need to provide custom info at registration time
-// Not sure yet there is a need for that... 
+// This method should be overloaded in modules that need to provide custom info at registration time
+// and in response to GET /api/ping, and in response to GET /api/data
 char* XIOTModule::_customData() {
   return NULL;
 }
 
+// This method should be overloaded in modules that need to process info from the UI
+// (sent by POST /get/data) 
+// Needs to return a malloc'ed char *
+char* XIOTModule::useData(char* data, int* httpCode) {
+  *httpCode = 200;
+  return emptyMallocedResponse();
+}
+
+char* XIOTModule::emptyMallocedResponse() {
+  char* dummy = (char*) malloc(5);
+  strcpy(dummy, "{}");
+  return dummy;
+}
 /**
  * Send a GET request to master 
  * Returns received json

@@ -97,6 +97,8 @@ protected:
   void _getConfigFromMaster();
   void _register();
   virtual char* _customData();
+  virtual char* useData(char* data, int* responseCode);
+  virtual char* emptyMallocedResponse();
   
   ModuleConfigClass* _config;
   DisplayClass* _oledDisplay;
