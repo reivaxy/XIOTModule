@@ -413,6 +413,10 @@ void XIOTModule::refresh() {
   _oledDisplay->refresh();    
 }
 
+void XIOTModule::hideDateTime(bool flag) {
+  _oledDisplay->hideDateTime(flag);
+}
+
 
 
 

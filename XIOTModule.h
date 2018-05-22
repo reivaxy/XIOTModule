@@ -84,6 +84,8 @@ public:
   void sendText(const char* msg, int code);
   void sendHtml(const char* msg, int code);
   void sendJson(const char* msg, int code);
+  void hideDateTime(bool);
+  bool _hideDateTime = false;
   
 protected:
   void _connectSTA();  
