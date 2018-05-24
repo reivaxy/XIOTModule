@@ -85,7 +85,13 @@ ESP8266WebServer* XIOTModule::getServer() {
 
 void XIOTModule::_initServer() {
   _server = new ESP8266WebServer(80);
-  
+
+  // list of headers we want to be able to read
+  const char * headerkeys[] = {"Xiot-forward-to"} ;
+  size_t headerkeyssize = sizeof(headerkeys)/sizeof(char*);
+  //ask server to track these headers
+  _server->collectHeaders(headerkeys, headerkeyssize );
+    
   _server->on("/api/ping", HTTP_GET, [&]() {
     uint32_t freeMem = system_get_free_heap_size();
     Serial.printf("Free heap mem: %d\n", freeMem);  
@@ -154,23 +160,39 @@ void XIOTModule::_initServer() {
     free(payloadStr);    
   });
   
-  // For now, process this request locally.
+  // TODO: update this comment. For now, process this request locally.
   // Later it could have a header with the IP of the intended recipient and will need to be forwarded.
   // Not sure it can work though     
-  _server->on("/api/data", HTTP_POST, [&]() {
-    String body = _server->arg("plain");
-    Serial.println("XIOT");
-    Serial.println(body);
-    int httpCode;
-    char *bodyStr;
-    XUtils::stringToCharP(body, &bodyStr);
-    char *response = useData(bodyStr, &httpCode);  // Each module subclass should override this if it expects any data from the UI.
-    free(bodyStr);
-    sendJson(response, httpCode);
-    free(response);        
+  _server->on("/api/data", HTTP_PUT, [&]() {
+    _processPostPut();
   });
-     
+  _server->on("/api/data", HTTP_POST, [&]() {
+    _processPostPut();
+  });
+  
+  
   _server->begin();
+}    
+
+void XIOTModule::_processPostPut() {  
+  String forwardTo = _server->header("Xiot-forward-to");
+  String body = _server->arg("plain");
+  int httpCode;
+  char *bodyStr, *response;
+  XUtils::stringToCharP(body, &bodyStr);
+  
+  if(forwardTo.length() != 0) {    
+    Serial.print("Forwarding data to ");
+    Serial.println(forwardTo);
+    response = (char *)malloc(1000);
+    APIPost(forwardTo, "/api/data", body, &httpCode, response, 1000);      
+  } else {
+    response = useData(bodyStr, &httpCode);  // Each module subclass should override this if it expects any data from the UI.
+  }
+  sendJson(response, httpCode);
+  free(response);        
+  free(bodyStr);
+   
 }
 
 /**

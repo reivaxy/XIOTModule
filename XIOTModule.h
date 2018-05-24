@@ -79,6 +79,7 @@ public:
   void masterAPIPost(const char* path, String payload, int* httpCode, char *jsonString = NULL, int maxLen = 0);
   void APIGet(String ipAddr, const char* path, int* httpCode, char *jsonString, int maxLen);  
   void APIGet(String ipAddr, const char* path, int* httpCode);  
+  void APIPut(String ipAddr, const char* path, String payload, int* httpCode, char *jsonString, int maxLen);  
   void APIPost(String ipAddr, const char* path, String payload, int* httpCode, char *jsonString, int maxLen);  
   void APIPost(String ipAddr, const char* path, String payload, int* httpCode);  
   void sendText(const char* msg, int code);
@@ -89,13 +90,13 @@ public:
   
 protected:
   void _connectSTA();  
-
+  void _processPostPut();
   void _initDisplay(int displayAddr, int displaySda, int displayScl);
   void _initServer();
-  void _timeDisplay();
-  void _wifiDisplay();
-  void _getConfigFromMaster();
-  void _register();
+  virtual void _timeDisplay();
+  virtual void _wifiDisplay();
+  virtual void _getConfigFromMaster();
+  virtual void _register();
   virtual char* _customData();
   virtual char* useData(char* data, int* responseCode);
   virtual char* emptyMallocedResponse();
