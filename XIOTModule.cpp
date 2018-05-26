@@ -93,23 +93,7 @@ void XIOTModule::_initServer() {
   _server->collectHeaders(headerkeys, headerkeyssize );
     
   _server->on("/api/ping", HTTP_GET, [&]() {
-    uint32_t freeMem = system_get_free_heap_size();
-    Serial.printf("Free heap mem: %d\n", freeMem);  
-    const int bufferSize = JSON_OBJECT_SIZE(2);
-    StaticJsonBuffer<bufferSize> jsonBuffer;
-    JsonObject& root = jsonBuffer.createObject();
-    char *customData = _customData();
-    int payloadSize = 100;
-    if(customData) {
-      root[XIOTModuleJsonTag::custom] = customData ;
-      payloadSize += strlen(customData);      
-    }
-    char* payloadStr = (char *) malloc(payloadSize);
-    root[XIOTModuleJsonTag::heap] = freeMem;
-    root.printTo(payloadStr, payloadSize);
-    sendJson(payloadStr, 200);
-    free(customData);
-    free(payloadStr);    
+    sendData(true);    
   });
 
   _server->on("/api/moduleReset", HTTP_GET, [&](){
@@ -139,33 +123,17 @@ void XIOTModule::_initServer() {
     sendJson("{}", 200);   // HTTP code 200 is enough
   });
 
-
-  // For now, process this request locally.
-  // Later it could have a header with the IP of the intended recipient and will need to be forwarded.
-  // Not sure it can work though
+  // Return this module's custom data if any
+  // Almost like ping request except for heap size. Is it worth it ? Could be exact same... 
   _server->on("/api/data", HTTP_GET, [&]() {
-    const int bufferSize = JSON_OBJECT_SIZE(2);
-    StaticJsonBuffer<bufferSize> jsonBuffer;
-    JsonObject& root = jsonBuffer.createObject();
-    char *customData = _customData();
-    int payloadSize = 100;
-    if(customData) {
-      root[XIOTModuleJsonTag::custom] = customData ;
-      payloadSize += strlen(customData);      
-    }
-    char* payloadStr = (char *) malloc(payloadSize);
-    root.printTo(payloadStr, payloadSize);
-    sendJson(payloadStr, 200);
-    free(customData);
-    free(payloadStr);    
+    sendData(true);
   });
   
-  // TODO: update this comment. For now, process this request locally.
-  // Later it could have a header with the IP of the intended recipient and will need to be forwarded.
-  // Not sure it can work though     
+  // The BackBone framework uses PUT to save data from UI to modules  
   _server->on("/api/data", HTTP_PUT, [&]() {
     _processPostPut();
   });
+  // But the modules can't PUT, they POST: handle both
   _server->on("/api/data", HTTP_POST, [&]() {
     _processPostPut();
   });
@@ -173,6 +141,46 @@ void XIOTModule::_initServer() {
   
   _server->begin();
 }    
+
+// This is responding to api/ping and api/data (for symmetry with put/post on api/data)
+// This is also when refreshing data
+int XIOTModule::sendData(bool isResponse) {
+  int httpCode = 200;
+  const int bufferSize = JSON_OBJECT_SIZE(3);
+  StaticJsonBuffer<bufferSize> jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject();
+  char macAddrStr[80]; // musn't be declared in the if !response block: would be "freed" too soon
+  
+  // Return heap size for health monitoring
+  uint32_t freeMem = system_get_free_heap_size();
+  Serial.printf("Free heap mem: %d\n", freeMem);  
+  root[XIOTModuleJsonTag::heap] = freeMem ;
+  
+  char *customData = _customData();
+  int payloadSize = 100; // for all curly brackets, comas, quotes, ... (2 or 3 attributes max)
+  if(customData) {
+    root[XIOTModuleJsonTag::custom] = customData ;
+    payloadSize += strlen(customData);      
+  }
+  // If this is a refresh request (not a ping response), we need to include the MAC address
+  if(!isResponse) {
+    uint8_t macAddr[6];
+    WiFi.macAddress(macAddr);
+    sprintf(macAddrStr, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]);
+    root[XIOTModuleJsonTag::MAC] = macAddrStr ;
+    payloadSize += strlen(macAddrStr);
+  }
+  char* payloadStr = (char *) malloc(payloadSize);
+  root.printTo(payloadStr, payloadSize);
+  if(isResponse) {
+    sendJson(payloadStr, httpCode);
+  } else {
+    masterAPIPost("/api/refresh", String(payloadStr), &httpCode, NULL, 0);
+  }
+  free(customData);
+  free(payloadStr);
+  return httpCode;
+}
 
 void XIOTModule::_processPostPut() {  
   String forwardTo = _server->header("Xiot-forward-to");
@@ -185,14 +193,15 @@ void XIOTModule::_processPostPut() {
     Serial.print("Forwarding data to ");
     Serial.println(forwardTo);
     response = (char *)malloc(1000);
-    APIPost(forwardTo, "/api/data", body, &httpCode, response, 1000);      
+    APIPost(forwardTo, "/api/data", body, &httpCode, response, 1000);
   } else {
     response = useData(bodyStr, &httpCode);  // Each module subclass should override this if it expects any data from the UI.
+    // We'll refresh the data on master once this request callback is done
+    _refreshNeeded = true;      
   }
   sendJson(response, httpCode);
   free(response);        
-  free(bodyStr);
-   
+  free(bodyStr);   
 }
 
 /**
@@ -279,10 +288,15 @@ void XIOTModule::_register() {
   // TODO: handle this in config like getUiClassName
   root[XIOTModuleJsonTag::canSleep] = false;
   
+  // The customPayload is the module's data that will be available to the webApp
+  // It's sent to the master when registering, as a JSON string contained in the
+  // "custom" attribute of the JSON registration payload.
+  // Sending it as a string means the master won't have trouble computing the Jsonbuffer size
+  // since it's just one element instead of an object containing many elements.
+  // The customdata will also be sent in response to the ping request from master
   char *customPayload = _customData();
   if(customPayload != NULL) {
-    if(strlen(customPayload) < MAX_CUSTOM_DATA_SIZE) {
-      // Add a string (could be some serialized JSON), that can be stored in master's slave collection
+    if(strlen(customPayload) < MAX_CUSTOM_DATA_SIZE) {      
       root[XIOTModuleJsonTag::custom] = customPayload;
     } else {
       _oledDisplay->setLine(1, "Custom Data too big", TRANSIENT, NOT_BLINKING);
@@ -300,6 +314,12 @@ void XIOTModule::_register() {
   } else {
     _oledDisplay->setLine(1, "Registration failed", TRANSIENT, NOT_BLINKING);
   } 
+}
+
+// Use this method to refresh the module's data on master
+// It's the data the UI is polling
+int XIOTModule::_refreshMaster() {
+  return sendData(false);
 }
 
 // This method should be overloaded in modules that need to provide custom info at registration time
@@ -337,6 +357,7 @@ void XIOTModule::masterAPIGet(const char* path, int* httpCode, char *jsonString,
 void XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode) {
   return APIGet(ipAddr, path, httpCode, NULL, 0);
 }
+
 void XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode, char *jsonString, int maxLen) {
   Debug("XIOTModule::APIGet\n");
   HTTPClient http;
@@ -452,7 +473,7 @@ void XIOTModule::sendText(const char* msg, int code) {
  * to properly handle clock, display, server
  * Or you need to handle these by yourself. 
  */
-void XIOTModule::refresh() {
+void XIOTModule::loop() {
   now(); // Needed to update the clock from the TimeLib library
   // (and used by NTP library)
       
@@ -481,7 +502,14 @@ void XIOTModule::refresh() {
     _timeLastTimeDisplay = timeNow;
     _timeDisplay();
   }
- 
+  if(_refreshNeeded) {
+    int httpCode = _refreshMaster();
+    // TODO: make sure we don't retry this every loop cycle
+    // if(httpCode == 200) {
+      _refreshNeeded = false;
+    // }
+  }
+  
   // Display needs to be refreshed continuously (for blinking, ...)
   _oledDisplay->refresh();    
 }

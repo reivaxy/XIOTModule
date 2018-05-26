@@ -69,10 +69,11 @@ public:
 #define MAC_ADDR_MAX_LENGTH 18
 
 class XIOTModule {
+// TODO: sort out public/protected stuff, for now it does not really make any sense
 public:
   XIOTModule(DisplayClass *display);
   XIOTModule(ModuleConfigClass* config, int addr, int sda, int scl);
-  void refresh();
+  virtual void loop();
   DisplayClass* getDisplay();
   ESP8266WebServer* getServer();
   void masterAPIGet(const char* path, int* httpCode, char *jsonString, int maxLen);  
@@ -85,6 +86,7 @@ public:
   void sendText(const char* msg, int code);
   void sendHtml(const char* msg, int code);
   void sendJson(const char* msg, int code);
+  virtual int sendData(bool isResponse);
   void hideDateTime(bool);
   bool _hideDateTime = false;
   
@@ -100,6 +102,7 @@ protected:
   virtual char* _customData();
   virtual char* useData(char* data, int* responseCode);
   virtual char* emptyMallocedResponse();
+  virtual int _refreshMaster();
   
   ModuleConfigClass* _config;
   DisplayClass* _oledDisplay;
@@ -112,5 +115,6 @@ protected:
   bool _canQueryMasterConfig = false;
   bool _canRegister = false;
   bool _timeInitialized = false;  
+  bool _refreshNeeded = false;  
   char *_localIP;
 };
