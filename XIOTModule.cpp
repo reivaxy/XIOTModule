@@ -510,12 +510,18 @@ void XIOTModule::loop() {
     // }
   }
   
+  customLoop();
+  
   // Display needs to be refreshed continuously (for blinking, ...)
   _oledDisplay->refresh();    
 }
 
 void XIOTModule::hideDateTime(bool flag) {
   _oledDisplay->hideDateTime(flag);
+}
+
+void XIOTModule::customLoop() {
+  // Override this method to implement your recurring processes
 }
 
 
