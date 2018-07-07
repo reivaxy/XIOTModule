@@ -137,7 +137,18 @@ void XIOTModule::_initServer() {
   _server->on("/api/data", HTTP_POST, [&]() {
     _processPostPut();
   });
-  
+      
+  _server->on("/api/restart", HTTP_GET, [&](){
+    String forwardTo = _server->header("Xiot-forward-to");
+    int httpCode;
+    if(forwardTo.length() != 0) {    
+      Serial.print("Forwarding restart to ");
+      Serial.println(forwardTo);
+      APIGet(forwardTo, "/api/restart", &httpCode, NULL, 0);
+    } else {
+      ESP.restart();     
+    }
+  });
   
   _server->begin();
 }    
@@ -352,11 +363,15 @@ void XIOTModule::masterAPIGet(const char* path, int* httpCode, char *jsonString,
 }
 
 /**
- * Send a GET request to given IP 
+ * Send a GET request to given IP, handling only the response code 
  */
 void XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode) {
   return APIGet(ipAddr, path, httpCode, NULL, 0);
 }
+
+/**
+ * Send a GET request to given IP, handling response code and payload 
+ */
 
 void XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode, char *jsonString, int maxLen) {
   Debug("XIOTModule::APIGet\n");
