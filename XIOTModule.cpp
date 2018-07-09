@@ -18,6 +18,7 @@ const char* XIOTModuleJsonTag::uiClassName = "uiClassName";
 const char* XIOTModuleJsonTag::custom = "custom";
 const char* XIOTModuleJsonTag::pong = "pong";
 const char* XIOTModuleJsonTag::heap = "heap";
+const char* XIOTModuleJsonTag::pingPeriod = "pingPeriod";
 const char* XIOTModuleJsonTag::registeringTime = "regTime";
 
 /**
@@ -160,7 +161,7 @@ int XIOTModule::sendData(bool isResponse) {
   int payloadSize = 100; // for all curly brackets, comas, quotes, ... (2 or 3 attributes max)
   if(customData) {
     root[XIOTModuleJsonTag::custom] = customData ;
-    payloadSize += strlen(customData);      
+    payloadSize += strlen(customData);
   }
   // If this is a refresh request (not a ping response), we need to include the MAC address
   if(!isResponse) {

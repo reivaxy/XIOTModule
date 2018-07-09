@@ -61,6 +61,7 @@ public:
   static const char* custom;
   static const char* pong;
   static const char* heap;
+  static const char* pingPeriod;
   static const char* registeringTime;
 };
 
