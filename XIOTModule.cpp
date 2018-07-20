@@ -32,7 +32,7 @@ XIOTModule::XIOTModule(DisplayClass *display) {
 }
 
 /**
- * This constructor is used only by slave modules that take full advantage of this class
+ * This constructor is used only by agent modules that take full advantage of this class
  */
 XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl) {
   _config = config;
@@ -50,16 +50,14 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   
   // Initialize the web server for the API
   _initServer();
-    
-  // Module is Wifi Station only
-  WiFi.mode(WIFI_STA);
   
-  // Nb: & allows to keep the reference to the caller object in the lambda block :)
+  // Nb: & allows to keep the reference to the caller object in the lambda block
   _wifiSTAGotIpHandler = WiFi.onStationModeGotIP([&](WiFiEventStationModeGotIP ipInfo) {
+    free(_localIP);
     XUtils::stringToCharP(ipInfo.ip.toString(), &_localIP);
     Serial.printf("Got IP on %s: %s\n", _config->getSsid(), _localIP);
     _wifiConnected = true;
-    _canQueryMasterConfig = true;  // Can't perform an http get from within the handler, it fails...
+    _canQueryMasterConfig = true;
     _wifiDisplay();
     
     // If connected to the customized SSID, module can register itself to master
@@ -71,12 +69,14 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   _wifiSTADisconnectedHandler = WiFi.onStationModeDisconnected([&](WiFiEventStationModeDisconnected event) {
     // Continuously get messages, so just output once.
     if(_wifiConnected) {
-      free(_localIP);
       Serial.printf("Lost connection to %s, error: %d\n", event.ssid.c_str(), event.reason);
       _oledDisplay->setLine(1, "Disconnected", TRANSIENT, NOT_BLINKING);
       _connectSTA();
     }
   });
+
+  // Module is Wifi Station only
+  WiFi.mode(WIFI_STA);  
   _connectSTA();
 }
 
@@ -138,7 +138,18 @@ void XIOTModule::_initServer() {
   _server->on("/api/data", HTTP_POST, [&]() {
     _processPostPut();
   });
-  
+      
+  _server->on("/api/restart", HTTP_GET, [&](){
+    String forwardTo = _server->header("Xiot-forward-to");
+    int httpCode;
+    if(forwardTo.length() != 0) {    
+      Serial.print("Forwarding restart to ");
+      Serial.println(forwardTo);
+      APIGet(forwardTo, "/api/restart", &httpCode, NULL, 0);
+    } else {
+      ESP.restart();     
+    }
+  });
   
   _server->begin();
 }    
@@ -233,6 +244,7 @@ void XIOTModule::_getConfigFromMaster() {
   if(httpCode == 200) {
     _canQueryMasterConfig = false;
     _oledDisplay->setLine(1, "Got config", TRANSIENT, NOT_BLINKING);
+    customRegistered();
   } else {
     _oledDisplay->setLine(1, "Getting config failed", TRANSIENT, NOT_BLINKING);
     return;
@@ -353,11 +365,15 @@ void XIOTModule::masterAPIGet(const char* path, int* httpCode, char *jsonString,
 }
 
 /**
- * Send a GET request to given IP 
+ * Send a GET request to given IP, handling only the response code 
  */
 void XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode) {
   return APIGet(ipAddr, path, httpCode, NULL, 0);
 }
+
+/**
+ * Send a GET request to given IP, handling response code and payload 
+ */
 
 void XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode, char *jsonString, int maxLen) {
   Debug("XIOTModule::APIGet\n");
@@ -523,6 +539,10 @@ void XIOTModule::hideDateTime(bool flag) {
 
 void XIOTModule::customLoop() {
   // Override this method to implement your recurring processes
+}
+
+void XIOTModule::customRegistered() {
+  // Override this method to implement your post registration init process
 }
 
 

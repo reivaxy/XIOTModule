@@ -76,6 +76,7 @@ public:
   XIOTModule(ModuleConfigClass* config, int addr, int sda, int scl);
   virtual void loop();
   virtual void customLoop();
+  virtual void customRegistered();
   DisplayClass* getDisplay();
   ESP8266WebServer* getServer();
   void masterAPIGet(const char* path, int* httpCode, char *jsonString, int maxLen);  
@@ -118,5 +119,5 @@ protected:
   bool _canRegister = false;
   bool _timeInitialized = false;  
   bool _refreshNeeded = false;  
-  char *_localIP;
+  char *_localIP = NULL;
 };
