@@ -76,7 +76,8 @@ public:
   XIOTModule(ModuleConfigClass* config, int addr, int sda, int scl);
   virtual void loop();
   virtual void customLoop();
-  virtual void customRegistered();
+  virtual void customRegistered(bool isSuccess);
+  virtual void customGotConfig(bool isSuccess);
   DisplayClass* getDisplay();
   ESP8266WebServer* getServer();
   void masterAPIGet(const char* path, int* httpCode, char *jsonString, int maxLen);  

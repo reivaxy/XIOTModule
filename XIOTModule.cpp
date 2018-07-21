@@ -244,33 +244,34 @@ void XIOTModule::_getConfigFromMaster() {
   if(httpCode == 200) {
     _canQueryMasterConfig = false;
     _oledDisplay->setLine(1, "Got config", TRANSIENT, NOT_BLINKING);
-    customRegistered();
+    customGotConfig(true);
   } else {
     _oledDisplay->setLine(1, "Getting config failed", TRANSIENT, NOT_BLINKING);
+    customGotConfig(false);
     return;
   }
-    
+
   bool masterTimeInitialized = root[XIOTModuleJsonTag::timeInitialized];
-  
+
   if(masterTimeInitialized) {
     long timestamp = root[XIOTModuleJsonTag::timestamp];
     setTime(timestamp);
     _timeInitialized = true;
   }
   bool APInitialized = root[XIOTModuleJsonTag::APInitialized];
-  // If access point on Master was customized, get its ssid and password, 
+  // If access point on Master was customized, get its ssid and password,
   // Save them in EEProm
   if(APInitialized) {
-    const char *ssid = root[XIOTModuleJsonTag::APSsid];   
+    const char *ssid = root[XIOTModuleJsonTag::APSsid];
     const char *pwd = root[XIOTModuleJsonTag::APPwd];
     // If AP not same as the one in config, save it
     if(strcmp(pwd, _config->getPwd()) != 0) {
       _config->setSsid(ssid);
       _config->setPwd(pwd);
       _config->saveToEeprom();     // TODO: partial save only !!!
-      _connectSTA();      
+      _connectSTA();
     }
-  }    
+  }
 }
 
 /**
@@ -287,20 +288,20 @@ void XIOTModule::_register() {
   _oledDisplay->setLine(1, "Registering", TRANSIENT, NOT_BLINKING);
   _wifiDisplay();
   StaticJsonBuffer<JSON_BUFFER_CONFIG_SIZE> jsonBuffer;
-  JsonObject& root = jsonBuffer.createObject(); 
+  JsonObject& root = jsonBuffer.createObject();
   root[XIOTModuleJsonTag::name] = _config->getName();
   root[XIOTModuleJsonTag::ip] = _localIP;
   root[XIOTModuleJsonTag::MAC] = macAddrStr;
   root[XIOTModuleJsonTag::uiClassName] = _config->getUiClassName();
   uint32_t freeMem = system_get_free_heap_size();
-  Serial.printf("Free heap mem: %d\n", freeMem);  
+  Serial.printf("Free heap mem: %d\n", freeMem);
   root[XIOTModuleJsonTag::heap] = freeMem;
-  
+
   // When implemented: return true if module uses sleep feature (battery)
   // So that master won't ping
   // TODO: handle this in config like getUiClassName
   root[XIOTModuleJsonTag::canSleep] = false;
-  
+
   // The customPayload is the module's data that will be available to the webApp
   // It's sent to the master when registering, as a JSON string contained in the
   // "custom" attribute of the JSON registration payload.
@@ -309,13 +310,13 @@ void XIOTModule::_register() {
   // The customdata will also be sent in response to the ping request from master
   char *customPayload = _customData();
   if(customPayload != NULL) {
-    if(strlen(customPayload) < MAX_CUSTOM_DATA_SIZE) {      
+    if(strlen(customPayload) < MAX_CUSTOM_DATA_SIZE) {
       root[XIOTModuleJsonTag::custom] = customPayload;
     } else {
       _oledDisplay->setLine(1, "Custom Data too big", TRANSIENT, NOT_BLINKING);
       root[XIOTModuleJsonTag::custom] = CUSTOM_DATA_TOO_BIG_VALUE;
     }
-  }  
+  }
   root.printTo(message, JSON_STRING_CONFIG_SIZE);
   free(customPayload);
 
@@ -324,9 +325,11 @@ void XIOTModule::_register() {
   if(httpCode == 200) {
     _canRegister = false;
     _oledDisplay->setLine(1, "Registered", TRANSIENT, NOT_BLINKING);
+    customRegistered(true);
   } else {
     _oledDisplay->setLine(1, "Registration failed", TRANSIENT, NOT_BLINKING);
-  } 
+    customRegistered(false);
+  }
 }
 
 // Use this method to refresh the module's data on master
@@ -541,7 +544,11 @@ void XIOTModule::customLoop() {
   // Override this method to implement your recurring processes
 }
 
-void XIOTModule::customRegistered() {
+void XIOTModule::customGotConfig(bool isSuccess) {
+  // Override this method to implement your post getConfig init process
+}
+
+void XIOTModule::customRegistered(bool isSuccess) {
   // Override this method to implement your post registration init process
 }
 
