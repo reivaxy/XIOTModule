@@ -27,6 +27,7 @@ const char* XIOTModuleJsonTag::registeringTime = "regTime";
  * Later, the class will be able to handle STA_AP
  */
 XIOTModule::XIOTModule(DisplayClass *display) {
+  WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
   _oledDisplay = display;
   _initServer();
 }
@@ -35,13 +36,14 @@ XIOTModule::XIOTModule(DisplayClass *display) {
  * This constructor is used only by agent modules that take full advantage of this class
  */
 XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl) {
+  WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
   _config = config;
   Serial.print("Initializing module ");
   Serial.println(config->getName());
-    
+
   // Initialise the OLED display
   _initDisplay(displayAddr, displaySda, displayScl);
-  
+
   if(config->getUiClassName()[0] == 0) {
     Serial.println("No uiClassName !!");
     _oledDisplay->setLine(2, "No uiClassName !", NOT_TRANSIENT, NOT_BLINKING);
