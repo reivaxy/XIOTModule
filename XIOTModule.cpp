@@ -104,24 +104,36 @@ void XIOTModule::_initServer() {
     sendJson("{}", 200);   // HTTP code 200 is enough 
   });
 
-  _server->on("/api/rename", HTTP_POST, [&](){
+  _server->on("/api/rename", HTTP_POST, [&]() {
+    String forwardTo = _server->header("Xiot-forward-to");
     String jsonBody = _server->arg("plain");
-    char message[100];
-    // I've seen a few unexplained parsing error so I have set a bigger buffer size...
-    const int bufferSize = 2* JSON_OBJECT_SIZE(2);
-    StaticJsonBuffer<bufferSize> jsonBuffer; 
-    JsonObject& root = jsonBuffer.parseObject(jsonBody); 
-    if (!root.success()) {
-      sendJson("{}", 500);
-      _oledDisplay->setLine(1, "Renaming failed", TRANSIENT, NOT_BLINKING);
-      return;
-    }
-    sprintf(message, "Renaming to %s\n", (const char*)root["name"] ); 
-    _oledDisplay->setLine(1, message, TRANSIENT, NOT_BLINKING);
-    _config->setName((const char*)root["name"]);
-    _config->saveToEeprom(); // TODO: partial save !!   
-    _oledDisplay->setTitle(_config->getName());
-    sendJson("{}", 200);   // HTTP code 200 is enough
+    if(forwardTo.length() != 0) { 
+      int httpCode;   
+      Serial.print("Forwarding rename to ");
+      Serial.println(forwardTo);
+      APIPost(forwardTo, "/api/rename", jsonBody, &httpCode, NULL, 0);
+    } else {
+      if(_config == NULL) {
+        sendJson("{\"error\": \"No config to update.\"}", 404);
+      }
+  
+      char message[100];
+      // I've seen a few unexplained parsing error so I have set a bigger buffer size...
+      const int bufferSize = 2* JSON_OBJECT_SIZE(2);
+      StaticJsonBuffer<bufferSize> jsonBuffer; 
+      JsonObject& root = jsonBuffer.parseObject(jsonBody); 
+      if (!root.success()) {
+        sendJson("{}", 500);
+        _oledDisplay->setLine(1, "Renaming failed", TRANSIENT, NOT_BLINKING);
+        return;
+      }
+      sprintf(message, "Renaming to %s\n", (const char*)root["name"] ); 
+      _oledDisplay->setLine(1, message, TRANSIENT, NOT_BLINKING);
+      _config->setName((const char*)root["name"]);
+      _config->saveToEeprom(); // TODO: partial save !!   
+      _oledDisplay->setTitle(_config->getName());
+      sendJson("{}", 200);   // HTTP code 200 is enough
+    }    
   });
 
   // Return this module's custom data if any
