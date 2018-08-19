@@ -36,6 +36,7 @@ XIOTModule::XIOTModule(DisplayClass *display) {
  */
 XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl) {
   _config = config;
+  WiFi.mode(WIFI_OFF);
   Serial.print("Initializing module ");
   Serial.println(config->getName());
     
