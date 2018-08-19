@@ -93,12 +93,12 @@ public:
   virtual int sendData(bool isResponse);
   void hideDateTime(bool);
   bool _hideDateTime = false;
+  void addModuleEndpoints();
   
 protected:
   void _connectSTA();  
   void _processPostPut();
   void _initDisplay(int displayAddr, int displaySda, int displayScl);
-  void _initServer();
   virtual void _timeDisplay();
   virtual void _wifiDisplay();
   virtual void _getConfigFromMaster();

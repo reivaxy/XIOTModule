@@ -28,7 +28,7 @@ const char* XIOTModuleJsonTag::registeringTime = "regTime";
  */
 XIOTModule::XIOTModule(DisplayClass *display) {
   _oledDisplay = display;
-  _initServer();
+  _server = new ESP8266WebServer(80);
 }
 
 /**
@@ -49,7 +49,9 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   }  
   
   // Initialize the web server for the API
-  _initServer();
+  _server = new ESP8266WebServer(80);
+
+  addModuleEndpoints();
   
   // Nb: & allows to keep the reference to the caller object in the lambda block
   _wifiSTAGotIpHandler = WiFi.onStationModeGotIP([&](WiFiEventStationModeGotIP ipInfo) {
@@ -84,9 +86,7 @@ ESP8266WebServer* XIOTModule::getServer() {
   return _server;
 }
 
-void XIOTModule::_initServer() {
-  _server = new ESP8266WebServer(80);
-
+void XIOTModule::addModuleEndpoints() {
   // list of headers we want to be able to read
   const char * headerkeys[] = {"Xiot-forward-to"} ;
   size_t headerkeyssize = sizeof(headerkeys)/sizeof(char*);
@@ -105,16 +105,18 @@ void XIOTModule::_initServer() {
   });
 
   _server->on("/api/rename", HTTP_POST, [&]() {
-    String forwardTo = _server->header("Xiot-forward-to");
+    String forwardTo = _server->header("Xiot-forward-to");   // when an agent can be a proxy to other agents
     String jsonBody = _server->arg("plain");
     if(forwardTo.length() != 0) { 
       int httpCode;   
       Serial.print("Forwarding rename to ");
       Serial.println(forwardTo);
+      // TODO process error
       APIPost(forwardTo, "/api/rename", jsonBody, &httpCode, NULL, 0);
     } else {
       if(_config == NULL) {
         sendJson("{\"error\": \"No config to update.\"}", 404);
+        return;
       }
   
       char message[100];
@@ -124,16 +126,16 @@ void XIOTModule::_initServer() {
       JsonObject& root = jsonBuffer.parseObject(jsonBody); 
       if (!root.success()) {
         sendJson("{}", 500);
-        _oledDisplay->setLine(1, "Renaming failed", TRANSIENT, NOT_BLINKING);
+        _oledDisplay->setLine(1, "Renaming agent failed", TRANSIENT, NOT_BLINKING);
         return;
       }
-      sprintf(message, "Renaming to %s\n", (const char*)root["name"] ); 
+      sprintf(message, "Renaming agent to %s\n", (const char*)root["name"] ); 
       _oledDisplay->setLine(1, message, TRANSIENT, NOT_BLINKING);
       _config->setName((const char*)root["name"]);
       _config->saveToEeprom(); // TODO: partial save !!   
       _oledDisplay->setTitle(_config->getName());
-      sendJson("{}", 200);   // HTTP code 200 is enough
     }    
+    sendJson("{}", 200);   // HTTP code 200 is enough
   });
 
   // Return this module's custom data if any
