@@ -86,6 +86,7 @@ public:
   void APIGet(String ipAddr, const char* path, int* httpCode);  
   void APIPut(String ipAddr, const char* path, String payload, int* httpCode, char *jsonString, int maxLen);  
   void APIPost(String ipAddr, const char* path, String payload, int* httpCode, char *jsonString, int maxLen);  
+  void APIPost(char *ipAddr, const char* path, String payload, int* httpCode, char *jsonString, int maxLen);  
   void APIPost(String ipAddr, const char* path, String payload, int* httpCode);  
   void sendText(const char* msg, int code);
   void sendHtml(const char* msg, int code);

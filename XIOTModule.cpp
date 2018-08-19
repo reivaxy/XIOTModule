@@ -219,6 +219,7 @@ void XIOTModule::_processPostPut() {
     Serial.print("Forwarding data to ");
     Serial.println(forwardTo);
     response = (char *)malloc(1000);
+    *response = 0;
     APIPost(forwardTo, "/api/data", body, &httpCode, response, 1000);
   } else {
     response = useData(bodyStr, &httpCode);  // Each module subclass should override this if it expects any data from the UI.
@@ -425,8 +426,15 @@ void XIOTModule::masterAPIPost(const char* path, String payload, int* httpCode, 
 void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* httpCode) {
   return APIPost(ipAddr, path, payload, httpCode, NULL, 0);
 }
+void XIOTModule::APIPost(char* ipAddr, const char* path, String payload, int* httpCode, char *jsonString, int maxLen) {
+  String ipAddrString = String(ipAddr);
+  APIPost(ipAddrString, path, payload, httpCode, jsonString, maxLen);
+}
+
 void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* httpCode, char *jsonString, int maxLen) {
   Debug("XIOTModule::APIPost\n");
+  Serial.println(ipAddr);
+  Serial.println(path);
   HTTPClient http;
   http.begin(ipAddr, 80, path);
   *httpCode = http.POST(payload);
