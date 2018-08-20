@@ -72,8 +72,8 @@ public:
 class XIOTModule {
 // TODO: sort out public/protected stuff, for now it does not really make any sense
 public:
-  XIOTModule(DisplayClass *display);
-  XIOTModule(ModuleConfigClass* config, int addr, int sda, int scl);
+  XIOTModule(DisplayClass *display, bool flipScreen = true, uint8_t brightness = 100);
+  XIOTModule(ModuleConfigClass* config, int addr, int sda, int scl, bool flipScreen = true, uint8_t brightness = 100);
   virtual void loop();
   virtual void customLoop();
   virtual void customRegistered(bool isSuccess);
@@ -99,7 +99,7 @@ public:
 protected:
   void _connectSTA();  
   void _processPostPut();
-  void _initDisplay(int displayAddr, int displaySda, int displayScl);
+  void _initDisplay(int displayAddr, int displaySda, int displayScl, bool flipScreen = true, uint8_t brightness = 100);
   virtual void _timeDisplay();
   virtual void _wifiDisplay();
   virtual void _getConfigFromMaster();

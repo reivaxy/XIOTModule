@@ -26,7 +26,7 @@ const char* XIOTModuleJsonTag::registeringTime = "regTime";
  * some methods available here.
  * Later, the class will be able to handle STA_AP
  */
-XIOTModule::XIOTModule(DisplayClass *display) {
+XIOTModule::XIOTModule(DisplayClass *display, bool flipScreen, uint8_t brightness) {
   _oledDisplay = display;
   _server = new ESP8266WebServer(80);
 }
@@ -34,14 +34,14 @@ XIOTModule::XIOTModule(DisplayClass *display) {
 /**
  * This constructor is used only by agent modules that take full advantage of this class
  */
-XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl) {
+XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl, bool flipScreen, uint8_t brightness) {
   _config = config;
   WiFi.mode(WIFI_OFF);
   Serial.print("Initializing module ");
   Serial.println(config->getName());
     
   // Initialise the OLED display
-  _initDisplay(displayAddr, displaySda, displayScl);
+  _initDisplay(displayAddr, displaySda, displayScl, flipScreen, brightness);
   
   if(config->getUiClassName()[0] == 0) {
     Serial.println("No uiClassName !!");
@@ -451,9 +451,9 @@ void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* h
 }
 
 
-void XIOTModule::_initDisplay(int displayAddr, int displaySda, int displayScl) {
+void XIOTModule::_initDisplay(int displayAddr, int displaySda, int displayScl, bool flipScreen, uint8_t brightness) {
   Debug("XIOTModule::_initDisplay\n");
-  _oledDisplay = new DisplayClass(displayAddr, displaySda, displayScl);
+  _oledDisplay = new DisplayClass(displayAddr, displaySda, displayScl, flipScreen, brightness);
   _oledDisplay->setTitle(_config->getName());
   _wifiDisplay();
   _timeDisplay();
