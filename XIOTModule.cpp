@@ -40,7 +40,6 @@ XIOTModule::XIOTModule(DisplayClass *display, bool flipScreen, uint8_t brightnes
 XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl, bool flipScreen, uint8_t brightness) {
   WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
   _config = config;
-  WiFi.mode(WIFI_OFF);
   Serial.print("Initializing module ");
   Serial.println(config->getName());
 
@@ -242,7 +241,7 @@ void XIOTModule::_connectSTA() {
   _canQueryMasterConfig = false;
   _canRegister = false;
   _wifiConnected = false;
-  Debug("XIOTModule::_connectSTA\n");
+  Debug("XIOTModule::_connectSTA %s\n", _config->getSsid());
   WiFi.begin(_config->getSsid(), _config->getPwd());
   _wifiDisplay();
 }
@@ -463,7 +462,7 @@ void XIOTModule::_initDisplay(int displayAddr, int displaySda, int displayScl, b
 }
 
 void XIOTModule::_timeDisplay() {
-  Debug("XIOTModule::_timeDisplay\n");
+//  Debug("XIOTModule::_timeDisplay\n");
   _oledDisplay->clockIcon(!_timeInitialized);
   if(_timeInitialized) {
     int h = hour();
