@@ -15,6 +15,9 @@
 #include <Arduino.h>
 #include <TimeLib.h>
 #include <XUtils.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+
 extern "C" {
   #include "user_interface.h"  // Allow getting heap size
 }
@@ -36,7 +39,9 @@ extern "C" {
 #define JSON_STRING_MEDIUM_SIZE 3000
 #define JSON_STRING_BIG_SIZE 10000
 
-#define JSON_BUFFER_CONFIG_SIZE JSON_OBJECT_SIZE(40)
+// https://arduinojson.org/v5/assistant says  JSON_OBJECT_SIZE(8) + 140
+#define JSON_BUFFER_CONFIG_SIZE JSON_OBJECT_SIZE(15) + 200
+
 #define JSON_STRING_CONFIG_SIZE 1000
 
 #define JSON_BUFFER_REGISTER_SIZE JSON_OBJECT_SIZE(20)
@@ -78,6 +83,7 @@ public:
   virtual void customLoop();
   virtual void customRegistered(bool isSuccess);
   virtual void customGotConfig(bool isSuccess);
+  virtual bool customBeforeOTA();
   DisplayClass* getDisplay();
   ESP8266WebServer* getServer();
   void masterAPIGet(const char* path, int* httpCode, char *jsonString, int maxLen);  
@@ -95,10 +101,13 @@ public:
   void hideDateTime(bool);
   bool _hideDateTime = false;
   void addModuleEndpoints();
+  bool isOTAStarted();
+  int startOTA(char* ssid, char*pwd);
   
 protected:
   void _connectSTA();  
   void _processPostPut();
+  void _setupOTA();
   void _initDisplay(int displayAddr, int displaySda, int displayScl, bool flipScreen = true, uint8_t brightness = 100);
   virtual void _timeDisplay();
   virtual void _wifiDisplay();
@@ -110,6 +119,7 @@ protected:
   virtual int _refreshMaster();
   
   ModuleConfigClass* _config;
+  bool _otaIsStarted = false;
   DisplayClass* _oledDisplay;
   ESP8266WebServer* _server;
   WiFiEventHandler _wifiSTAGotIpHandler, _wifiSTADisconnectedHandler;

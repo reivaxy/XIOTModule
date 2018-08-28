@@ -23,12 +23,11 @@ const char* XIOTModuleJsonTag::registeringTime = "regTime";
 
 /**
  * This constructor is used by master iotinator, just to take advantage of
- * some methods available here.
- * Later, the class will be able to handle STA_AP
+ * some methods available here. It's crappy, need to be fixed
  */
-
 XIOTModule::XIOTModule(DisplayClass *display, bool flipScreen, uint8_t brightness) {
   WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
+  _setupOTA();
   _oledDisplay = display;
   _server = new ESP8266WebServer(80);
 }
@@ -36,9 +35,9 @@ XIOTModule::XIOTModule(DisplayClass *display, bool flipScreen, uint8_t brightnes
 /**
  * This constructor is used only by agent modules that take full advantage of this class
  */
-
 XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl, bool flipScreen, uint8_t brightness) {
   WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
+  _setupOTA();
   _config = config;
   Serial.print("Initializing module ");
   Serial.println(config->getName());
@@ -60,20 +59,26 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   _wifiSTAGotIpHandler = WiFi.onStationModeGotIP([&](WiFiEventStationModeGotIP ipInfo) {
     free(_localIP);
     XUtils::stringToCharP(ipInfo.ip.toString(), &_localIP);
-    Serial.printf("Got IP on %s: %s\n", _config->getSsid(), _localIP);
-    _wifiConnected = true;
-    _canQueryMasterConfig = true;
-    _wifiDisplay();
-    
-    // If connected to the customized SSID, module can register itself to master
-    if(strcmp(DEFAULT_APPWD, _config->getPwd()) != 0) {
-      _canRegister = true;
+    if(_otaIsStarted) {
+      char message[30];
+      sprintf(message, "Ota ready: %s", _localIP);
+      _oledDisplay->setLine(0, message, NOT_TRANSIENT, NOT_BLINKING);    
+    } else {
+      Serial.printf("Got IP on %s: %s\n", _config->getSsid(), _localIP);
+      _wifiConnected = true;
+      _canQueryMasterConfig = true;
+      _wifiDisplay();
+      
+      // If connected to the customized SSID, module can register itself to master
+      if(strcmp(DEFAULT_APPWD, _config->getPwd()) != 0) {
+        _canRegister = true;
+      }
     }
   }); 
   
   _wifiSTADisconnectedHandler = WiFi.onStationModeDisconnected([&](WiFiEventStationModeDisconnected event) {
     // Continuously get messages, so just output once.
-    if(_wifiConnected) {
+    if(_wifiConnected && !_otaIsStarted ) {
       Serial.printf("Lost connection to %s, error: %d\n", event.ssid.c_str(), event.reason);
       _oledDisplay->setLine(1, "Disconnected", TRANSIENT, NOT_BLINKING);
       _connectSTA();
@@ -123,8 +128,7 @@ void XIOTModule::addModuleEndpoints() {
       }
   
       char message[100];
-      // I've seen a few unexplained parsing error so I have set a bigger buffer size...
-      const int bufferSize = 2* JSON_OBJECT_SIZE(2);
+      const int bufferSize = JSON_OBJECT_SIZE(2) + 20 + NAME_MAX_LENGTH;
       StaticJsonBuffer<bufferSize> jsonBuffer; 
       JsonObject& root = jsonBuffer.parseObject(jsonBody); 
       if (!root.success()) {
@@ -168,6 +172,33 @@ void XIOTModule::addModuleEndpoints() {
     }
   });
   
+  // OTA: update 
+  _server->on("/api/ota", HTTP_POST, [&]() {
+    String forwardTo = _server->header("Xiot-forward-to");
+    String jsonBody = _server->arg("plain");
+    int httpCode = 200;
+    char ssid[SSID_MAX_LENGTH];
+    char pwd[PWD_MAX_LENGTH];
+    const int bufferSize = JSON_OBJECT_SIZE(2) + 15 + SSID_MAX_LENGTH + PWD_MAX_LENGTH;
+    StaticJsonBuffer<bufferSize> jsonBuffer;      
+    JsonObject& root = jsonBuffer.parseObject(jsonBody); 
+    if (!root.success()) {
+      sendJson("{}", 500);
+      _oledDisplay->setLine(1, "Ota setup failed", TRANSIENT, NOT_BLINKING);
+      return;
+    }
+    ssid[0] = 0;
+    pwd[0] = 0;
+    if(root["ssid"] != NULL)
+      strlcpy(ssid, (const char *)root["ssid"], sizeof(ssid));
+
+    if(root["pwd"] != NULL)
+      strlcpy(pwd, (const char *)root["pwd"], sizeof(pwd));
+
+    httpCode = startOTA(ssid, pwd);
+    sendJson("{}", httpCode);      
+  });
+    
   _server->begin();
 }    
 
@@ -452,6 +483,57 @@ void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* h
   http.end();
 }
 
+bool XIOTModule::isOTAStarted() {
+  return _otaIsStarted;
+}
+
+// Set the module in Update Waiting Mode: connect to ssid if provided, and setup the stuff
+void XIOTModule::_setupOTA() {
+  ArduinoOTA.onStart([&]() {
+    Serial.println("Start updating.");
+    _oledDisplay->setLine(2, "Start updating", TRANSIENT, NOT_BLINKING);
+  });  
+  ArduinoOTA.onEnd([&]() {
+    Serial.println("\nEnd updating.");
+    _oledDisplay->setLine(2, "End updating", TRANSIENT, NOT_BLINKING);
+  });  
+  ArduinoOTA.onProgress([&](unsigned int progress, unsigned int total) {
+    char message[50];
+    sprintf(message, "Progress: %u%%", (progress / (total / 100)));
+    _oledDisplay->setLine(2, message, NOT_TRANSIENT, NOT_BLINKING);
+  });
+  ArduinoOTA.onError([&](ota_error_t error) {
+    char msgErr[50];
+
+    sprintf(msgErr, "OTA Error[%u]: ", error);
+    _oledDisplay->setLine(1, msgErr, NOT_TRANSIENT, BLINKING);
+     
+    if (error == OTA_AUTH_ERROR) sprintf(msgErr,"Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) sprintf(msgErr,"Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) sprintf(msgErr,"Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) sprintf(msgErr,"Receive Failed");
+    else if (error == OTA_END_ERROR) sprintf(msgErr,"End Failed");
+    _oledDisplay->setLine(1, msgErr, NOT_TRANSIENT, NOT_BLINKING);
+  });
+}
+
+int XIOTModule::startOTA(char* ssid, char* pwd) {
+  bool enabled = customBeforeOTA();
+  Serial.printf("SSID : %s\n", ssid);
+  if(!enabled) {
+    _oledDisplay->setLine(1, "OTA mode refused", TRANSIENT, NOT_BLINKING);
+    return 403;  
+  }
+  _oledDisplay->setLine(1, "WAITING OTA", NOT_TRANSIENT, BLINKING);
+  _oledDisplay->setLine(2, "", NOT_TRANSIENT, NOT_BLINKING);
+  _otaIsStarted = true;
+  if(ssid != NULL && strlen(ssid) > 0) {
+    Serial.printf("Connecting to %s\n", ssid);
+    WiFi.begin(ssid, pwd);
+  }
+  ArduinoOTA.begin();
+  return 200;
+}
 
 void XIOTModule::_initDisplay(int displayAddr, int displaySda, int displayScl, bool flipScreen, uint8_t brightness) {
   Debug("XIOTModule::_initDisplay\n");
@@ -479,6 +561,8 @@ void XIOTModule::_timeDisplay() {
 
 void XIOTModule::_wifiDisplay() {
   Debug("XIOTModule::_wifiDisplay\n");
+  if(_otaIsStarted) return;
+  
   char message[100];
   WifiType wifiType = STA;
   bool blinkWifi = false;
@@ -523,8 +607,14 @@ void XIOTModule::loop() {
   // (and used by NTP library)
       
   // Check if any request to serve
-  _server->handleClient();  
- 
+  _server->handleClient();
+    
+  if(_otaIsStarted) {
+    _oledDisplay->refresh();
+    ArduinoOTA.handle();
+    return;
+  }
+  
   unsigned int timeNow = millis();
   // Should we get the config from master ?
   if(_wifiConnected && _canQueryMasterConfig && (timeNow - _timeLastGetConfig >= 5000)) {
@@ -575,6 +665,12 @@ void XIOTModule::customGotConfig(bool isSuccess) {
 
 void XIOTModule::customRegistered(bool isSuccess) {
   // Override this method to implement your post registration init process
+}
+
+bool XIOTModule::customBeforeOTA() {
+  // Override this method to implement custom processing before initiating OTA.
+  // You can block it returning false.
+  return true;
 }
 
 
