@@ -68,6 +68,8 @@ public:
   static const char* heap;
   static const char* pingPeriod;
   static const char* registeringTime;
+  static const char* pwd;
+  static const char* ssid;
 };
 
 #define IP_MAX_LENGTH 16
@@ -102,7 +104,7 @@ public:
   bool _hideDateTime = false;
   void addModuleEndpoints();
   bool isOTAStarted();
-  int startOTA(char* ssid, char*pwd);
+  int startOTA(const char* ssid, const char*pwd);
   
 protected:
   void _connectSTA();  

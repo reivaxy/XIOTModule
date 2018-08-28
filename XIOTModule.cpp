@@ -7,6 +7,8 @@ const char* XIOTModuleJsonTag::APInitialized = "APInitialized";
 const char* XIOTModuleJsonTag::version = "version";
 const char* XIOTModuleJsonTag::APSsid = "APSsid";
 const char* XIOTModuleJsonTag::APPwd = "APPwd";
+const char* XIOTModuleJsonTag::ssid = "ssid";
+const char* XIOTModuleJsonTag::pwd = "pwd";
 const char* XIOTModuleJsonTag::homeWifiConnected = "homeWifiConnected";
 const char* XIOTModuleJsonTag::gsmEnabled = "gsmEnabled";
 const char* XIOTModuleJsonTag::timeInitialized = "timeInitialized";
@@ -187,15 +189,15 @@ void XIOTModule::addModuleEndpoints() {
       _oledDisplay->setLine(1, "Ota setup failed", TRANSIENT, NOT_BLINKING);
       return;
     }
-    ssid[0] = 0;
-    pwd[0] = 0;
-    if(root["ssid"] != NULL)
-      strlcpy(ssid, (const char *)root["ssid"], sizeof(ssid));
+    const char *ssidp = (const char*)root[XIOTModuleJsonTag::ssid];
+    const char *pwdp = (const char*)root[XIOTModuleJsonTag::pwd];
+//    if(ssidp != NULL)
+//      strlcpy(ssid, ssidp, sizeof(ssid));
+//
+//    if(pwdp != NULL)
+//      strlcpy(pwd, pwdp, sizeof(pwd));
 
-    if(root["pwd"] != NULL)
-      strlcpy(pwd, (const char *)root["pwd"], sizeof(pwd));
-
-    httpCode = startOTA(ssid, pwd);
+    httpCode = startOTA(ssidp, pwdp);
     sendJson("{}", httpCode);      
   });
     
@@ -491,6 +493,7 @@ bool XIOTModule::isOTAStarted() {
 void XIOTModule::_setupOTA() {
   ArduinoOTA.onStart([&]() {
     Serial.println("Start updating.");
+    _oledDisplay->setLine(1, "Loading...", NOT_TRANSIENT, BLINKING);
     _oledDisplay->setLine(2, "Start updating", TRANSIENT, NOT_BLINKING);
   });  
   ArduinoOTA.onEnd([&]() {
@@ -501,6 +504,7 @@ void XIOTModule::_setupOTA() {
     char message[50];
     sprintf(message, "Progress: %u%%", (progress / (total / 100)));
     _oledDisplay->setLine(2, message, NOT_TRANSIENT, NOT_BLINKING);
+    _oledDisplay->refresh();
   });
   ArduinoOTA.onError([&](ota_error_t error) {
     char msgErr[50];
@@ -517,14 +521,14 @@ void XIOTModule::_setupOTA() {
   });
 }
 
-int XIOTModule::startOTA(char* ssid, char* pwd) {
+int XIOTModule::startOTA(const char* ssid, const char* pwd) {
   bool enabled = customBeforeOTA();
   Serial.printf("SSID : %s\n", ssid);
   if(!enabled) {
     _oledDisplay->setLine(1, "OTA mode refused", TRANSIENT, NOT_BLINKING);
     return 403;  
   }
-  _oledDisplay->setLine(1, "WAITING OTA", NOT_TRANSIENT, BLINKING);
+  _oledDisplay->setLine(1, "Waiting for OTA", NOT_TRANSIENT, BLINKING);
   _oledDisplay->setLine(2, "", NOT_TRANSIENT, NOT_BLINKING);
   _otaIsStarted = true;
   if(ssid != NULL && strlen(ssid) > 0) {
