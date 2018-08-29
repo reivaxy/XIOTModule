@@ -469,7 +469,7 @@ void XIOTModule::APIPost(char* ipAddr, const char* path, String payload, int* ht
 
 void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* httpCode, char *jsonString, int maxLen) {
   Debug("XIOTModule::APIPost\n");
-  Serial.println(ipAddr);
+//  Serial.println(ipAddr);
   Serial.println(path);
   HTTPClient http;
   http.begin(ipAddr, 80, path);
@@ -492,12 +492,10 @@ bool XIOTModule::isOTAStarted() {
 // Set the module in Update Waiting Mode: connect to ssid if provided, and setup the stuff
 void XIOTModule::_setupOTA() {
   ArduinoOTA.onStart([&]() {
-    Serial.println("Start updating.");
     _oledDisplay->setLine(1, "Loading...", NOT_TRANSIENT, BLINKING);
     _oledDisplay->setLine(2, "Start updating", TRANSIENT, NOT_BLINKING);
   });  
   ArduinoOTA.onEnd([&]() {
-    Serial.println("\nEnd updating.");
     _oledDisplay->setLine(2, "End updating", TRANSIENT, NOT_BLINKING);
   });  
   ArduinoOTA.onProgress([&](unsigned int progress, unsigned int total) {
