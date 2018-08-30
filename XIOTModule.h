@@ -86,6 +86,8 @@ public:
   virtual void customRegistered(bool isSuccess);
   virtual void customGotConfig(bool isSuccess);
   virtual bool customBeforeOTA();
+  virtual void customOnStaGotIpHandled(WiFiEventStationModeGotIP ipInfo);
+  
   DisplayClass* getDisplay();
   ESP8266WebServer* getServer();
   void masterAPIGet(const char* path, int* httpCode, char *jsonString, int maxLen);  
