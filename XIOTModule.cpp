@@ -27,16 +27,14 @@ const char* XIOTModuleJsonTag::registeringTime = "regTime";
  * This constructor is used by master iotinator, just to take advantage of
  * some methods available here. It's crappy, need to be fixed
  */
-XIOTModule::XIOTModule(DisplayClass *display, bool flipScreen, uint8_t brightness) {
-  WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
-  _setupOTA();
-  _oledDisplay = display;
-  _server = new ESP8266WebServer(80);
-}
+//XIOTModule::XIOTModule(DisplayClass *display, bool flipScreen, uint8_t brightness) {
+//  WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
+//  _setupOTA();
+//  _oledDisplay = display;
+//  _server = new ESP8266WebServer(80);
+//}
 
-/**
- * This constructor is used only by agent modules that take full advantage of this class
- */
+
 XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl, bool flipScreen, uint8_t brightness) {
   WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
   _setupOTA();
@@ -46,7 +44,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
 
   // Initialise the OLED display
   _initDisplay(displayAddr, displaySda, displayScl, flipScreen, brightness);
-  if(config->getUiClassName()[0] == 0) {
+  if(!_isMaster && config->getUiClassName()[0] == 0) {
     Serial.println("No uiClassName !!");
     _oledDisplay->setLine(2, "No uiClassName !", NOT_TRANSIENT, NOT_BLINKING);
     _oledDisplay->alertIconOn(true);
@@ -57,7 +55,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
 
   addModuleEndpoints();
   
-  // Nb: & allows to keep the reference to the caller object in the lambda block
+  // Nb: [&] allows to keep the reference to the caller object in the lambda block
   _wifiSTAGotIpHandler = WiFi.onStationModeGotIP([&](WiFiEventStationModeGotIP ipInfo) {
     free(_localIP);
     XUtils::stringToCharP(ipInfo.ip.toString(), &_localIP);
