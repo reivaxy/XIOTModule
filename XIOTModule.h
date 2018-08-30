@@ -79,7 +79,7 @@ public:
 class XIOTModule {
 // TODO: sort out public/protected stuff, for now it does not really make any sense
 public:
-//  XIOTModule(DisplayClass *display, bool flipScreen = true, uint8_t brightness = 100);
+  XIOTModule(DisplayClass *display, bool flipScreen = true, uint8_t brightness = 100);
   XIOTModule(ModuleConfigClass* config, int addr, int sda, int scl, bool flipScreen = true, uint8_t brightness = 100);
   virtual void loop();
   virtual void customLoop();
@@ -107,8 +107,6 @@ public:
   int startOTA(const char* ssid, const char*pwd);
   
 protected:
-  bool _isMaster = false;
-  void setMaster(bool);
   void _connectSTA();  
   void _processPostPut();
   void _setupOTA();
