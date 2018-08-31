@@ -175,9 +175,8 @@ void XIOTModule::addModuleEndpoints() {
     }
   });
   
-  // OTA: update 
+  // OTA: update. NB: for now, master has its own api endpoint 
   _server->on("/api/ota", HTTP_POST, [&]() {
-    String forwardTo = _server->header("Xiot-forward-to");
     String jsonBody = _server->arg("plain");
     int httpCode = 200;
     char ssid[SSID_MAX_LENGTH];
@@ -192,12 +191,6 @@ void XIOTModule::addModuleEndpoints() {
     }
     const char *ssidp = (const char*)root[XIOTModuleJsonTag::ssid];
     const char *pwdp = (const char*)root[XIOTModuleJsonTag::pwd];
-//    if(ssidp != NULL)
-//      strlcpy(ssid, ssidp, sizeof(ssid));
-//
-//    if(pwdp != NULL)
-//      strlcpy(pwd, pwdp, sizeof(pwd));
-
     httpCode = startOTA(ssidp, pwdp);
     sendJson("{}", httpCode);      
   });
