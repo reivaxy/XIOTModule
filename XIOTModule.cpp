@@ -29,7 +29,7 @@ const char* XIOTModuleJsonTag::registeringTime = "regTime";
  */
 XIOTModule::XIOTModule(DisplayClass *display, bool flipScreen, uint8_t brightness) {
   WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
-  _setupOTA();
+//  _setupOTA();
   _oledDisplay = display;
   _server = new ESP8266WebServer(80);
 }
@@ -39,7 +39,7 @@ XIOTModule::XIOTModule(DisplayClass *display, bool flipScreen, uint8_t brightnes
  */
 XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl, bool flipScreen, uint8_t brightness) {
   WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
-  _setupOTA();
+//  _setupOTA();
   _config = config;
   Serial.print("Initializing module ");
   Serial.println(config->getName());
@@ -61,10 +61,11 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   _wifiSTAGotIpHandler = WiFi.onStationModeGotIP([&](WiFiEventStationModeGotIP ipInfo) {
     free(_localIP);
     XUtils::stringToCharP(ipInfo.ip.toString(), &_localIP);
-    if(_otaIsStarted) {
+    if(isWaitingOTA()) {
       char message[30];
       sprintf(message, "Ota ready: %s", _localIP);
-      _oledDisplay->setLine(0, message, NOT_TRANSIENT, NOT_BLINKING);    
+      _oledDisplay->setLine(0, message, NOT_TRANSIENT, NOT_BLINKING);
+      ArduinoOTA.begin();    
     } else {
       Serial.printf("Got IP on %s: %s\n", _config->getSsid(), _localIP);
       _wifiConnected = true;
@@ -81,7 +82,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   
   _wifiSTADisconnectedHandler = WiFi.onStationModeDisconnected([&](WiFiEventStationModeDisconnected event) {
     // Continuously get messages, so just output once.
-    if(_wifiConnected && !_otaIsStarted ) {
+    if(_wifiConnected && !isWaitingOTA() ) {
       Serial.printf("Lost connection to %s, error: %d\n", event.ssid.c_str(), event.reason);
       _oledDisplay->setLine(1, "Disconnected", TRANSIENT, NOT_BLINKING);
       _connectSTA();
@@ -479,13 +480,14 @@ void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* h
   http.end();
 }
 
-bool XIOTModule::isOTAStarted() {
-  return _otaIsStarted;
+bool XIOTModule::isWaitingOTA() {
+  return (_otaReadyTime != 0);
 }
 
 // Set the module in Update Waiting Mode: connect to ssid if provided, and setup the stuff
 void XIOTModule::_setupOTA() {
   ArduinoOTA.onStart([&]() {
+    _otaIsStarted = true;
     _oledDisplay->setLine(1, "Loading...", NOT_TRANSIENT, BLINKING);
     _oledDisplay->setLine(2, "Start updating", TRANSIENT, NOT_BLINKING);
   });  
@@ -520,14 +522,14 @@ int XIOTModule::startOTA(const char* ssid, const char* pwd) {
     _oledDisplay->setLine(1, "OTA mode refused", TRANSIENT, NOT_BLINKING);
     return 403;  
   }
+  _otaReadyTime = millis();
+  _setupOTA();
   _oledDisplay->setLine(1, "Waiting for OTA", NOT_TRANSIENT, BLINKING);
   _oledDisplay->setLine(2, "", NOT_TRANSIENT, NOT_BLINKING);
-  _otaIsStarted = true;
   if(ssid != NULL && strlen(ssid) > 0) {
     Serial.printf("Connecting to %s\n", ssid);
     WiFi.begin(ssid, pwd);
   }
-  ArduinoOTA.begin();
   return 200;
 }
 
@@ -557,7 +559,7 @@ void XIOTModule::_timeDisplay() {
 
 void XIOTModule::_wifiDisplay() {
   Debug("XIOTModule::_wifiDisplay\n");
-  if(_otaIsStarted) return;
+  if(isWaitingOTA() ) return;
   
   char message[100];
   WifiType wifiType = STA;
@@ -605,7 +607,12 @@ void XIOTModule::loop() {
   // Check if any request to serve
   _server->handleClient();
     
-  if(_otaIsStarted) {
+  if(isWaitingOTA()) {  
+    // If waiting for OTA for more than 2mn but not started, restart (cancel OTA)
+    if(!_otaIsStarted && ((millis() - _otaReadyTime) > 120000)) {
+      ESP.restart();
+      return; // probably not necessary
+    }
     _oledDisplay->refresh();
     ArduinoOTA.handle();
     return;

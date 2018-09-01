@@ -105,7 +105,7 @@ public:
   void hideDateTime(bool);
   bool _hideDateTime = false;
   void addModuleEndpoints();
-  bool isOTAStarted();
+  bool isWaitingOTA();
   int startOTA(const char* ssid, const char*pwd);
   
 protected:
@@ -124,6 +124,7 @@ protected:
   
   ModuleConfigClass* _config;
   bool _otaIsStarted = false;
+  time_t _otaReadyTime = 0;
   DisplayClass* _oledDisplay;
   ESP8266WebServer* _server;
   WiFiEventHandler _wifiSTAGotIpHandler, _wifiSTADisconnectedHandler;
