@@ -63,7 +63,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
     XUtils::stringToCharP(ipInfo.ip.toString(), &_localIP);
     if(isWaitingOTA()) {
       char message[30];
-      sprintf(message, "Ota ready: %s", _localIP);
+      sprintf(message, "OTA ready: %s", _localIP);
       _oledDisplay->setLine(0, message, NOT_TRANSIENT, NOT_BLINKING);
       ArduinoOTA.begin();    
     } else {
@@ -192,8 +192,8 @@ void XIOTModule::addModuleEndpoints() {
     }
     const char *ssidp = (const char*)root[XIOTModuleJsonTag::ssid];
     const char *pwdp = (const char*)root[XIOTModuleJsonTag::pwd];
+    sendJson("{}", httpCode); // send reply before disconnecting/reconnecting.     
     httpCode = startOTA(ssidp, pwdp);
-    sendJson("{}", httpCode);      
   });
     
   _server->begin();
@@ -524,6 +524,7 @@ int XIOTModule::startOTA(const char* ssid, const char* pwd) {
   }
   _otaReadyTime = millis();
   _setupOTA();
+  _oledDisplay->setLine(0, "Switching SSID for OTA", NOT_TRANSIENT, BLINKING);
   _oledDisplay->setLine(1, "Waiting for OTA", NOT_TRANSIENT, BLINKING);
   _oledDisplay->setLine(2, "", NOT_TRANSIENT, NOT_BLINKING);
   if(ssid != NULL && strlen(ssid) > 0) {
@@ -608,8 +609,15 @@ void XIOTModule::loop() {
   _server->handleClient();
     
   if(isWaitingOTA()) {  
-    // If waiting for OTA for more than 2mn but not started, restart (cancel OTA)
-    if(!_otaIsStarted && ((millis() - _otaReadyTime) > 120000)) {
+    int remainingTime = 180 - ((millis() - _otaReadyTime) / 1000);
+    char remainingTimeMsg[10];
+    sprintf(remainingTimeMsg, "%d", remainingTime);
+    _oledDisplay->setLine(4, remainingTimeMsg);
+    // If waiting for OTA for more than 3mn but not started, restart (cancel OTA)
+    if(!_otaIsStarted && ( remainingTime <= 0)) {
+      _oledDisplay->setLine(1, "OTA cancelled (timeout)");
+      _oledDisplay->refresh();
+      delay(200);
       ESP.restart();
       return; // probably not necessary
     }
