@@ -44,12 +44,21 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
 
   // Initialise the OLED display
   _initDisplay(displayAddr, displaySda, displayScl, flipScreen, brightness);
-  if(!_isMaster && config->getUiClassName()[0] == 0) {
+  
+  #ifndef XIOT_MASTER
+  if(config->getUiClassName()[0] == 0) {
     Serial.println("No uiClassName !!");
     _oledDisplay->setLine(2, "No uiClassName !", NOT_TRANSIENT, NOT_BLINKING);
     _oledDisplay->alertIconOn(true);
   }  
+  #endif
+
+  #ifdef XIOT_MASTER
+  // Initialize the Agent Collection
+  agentCollection = new AgentCollection(this);
+  #endif
   
+    
   // Initialize the web server for the API
   _server = new ESP8266WebServer(80);
 
@@ -112,39 +121,143 @@ void XIOTModule::addModuleEndpoints() {
     sendJson("{}", 200);   // HTTP code 200 is enough 
   });
 
-  _server->on("/api/rename", HTTP_POST, [&]() {
-    String forwardTo = _server->header("Xiot-forward-to");   // when an agent can be a proxy to other agents
-    String jsonBody = _server->arg("plain");
-    if(forwardTo.length() != 0) { 
-      int httpCode;   
-      Serial.print("Forwarding rename to ");
-      Serial.println(forwardTo);
-      // TODO process error
-      APIPost(forwardTo, "/api/rename", jsonBody, &httpCode, NULL, 0);
+  server->on("/api/rename", HTTP_POST, [&]() {
+    char *forwardTo;
+    XUtils::stringToCharP(server->header("Xiot-forward-to"), &forwardTo);
+    String jsonBody = server->arg("plain");
+    char message[100];
+    
+    // I've seen a few unexplained parsing error so I have set a bigger buffer size...
+    // TODO : fix this size
+    const int bufferSize = 2* JSON_OBJECT_SIZE(2);
+    StaticJsonBuffer<bufferSize> jsonBuffer; 
+    JsonObject& root = jsonBuffer.parseObject(jsonBody); 
+    if (!root.success()) {
+      sendJson("{}", 500);
+      if(strlen(forwardTo) != 0) { 
+       _oledDisplay->setLine(1, "Renaming agent failed", TRANSIENT, NOT_BLINKING);
+      } else {
+       _oledDisplay->setLine(1, "Renaming master failed", TRANSIENT, NOT_BLINKING);
+      }
+      free(forwardTo);
+      return;
+    }
+    // Forward the rename to an agent
+    if(strlen(forwardTo) != 0) {
+      #ifdef XIOT_MASTER     
+      agentCollection->renameAgent(forwardTo, (const char*)root["name"]);
+      #endif
+      // TODO: warn if not a master
+      free(forwardTo);
     } else {
-      if(_config == NULL) {
+      free(forwardTo);    
+      if(config == NULL) {
         sendJson("{\"error\": \"No config to update.\"}", 404);
         return;
       }
-  
-      char message[100];
-      const int bufferSize = JSON_OBJECT_SIZE(2) + 20 + NAME_MAX_LENGTH;
-      StaticJsonBuffer<bufferSize> jsonBuffer; 
-      JsonObject& root = jsonBuffer.parseObject(jsonBody); 
-      if (!root.success()) {
-        sendJson("{}", 500);
-        _oledDisplay->setLine(1, "Renaming agent failed", TRANSIENT, NOT_BLINKING);
-        return;
-      }
-      sprintf(message, "Renaming agent to %s\n", (const char*)root["name"] ); 
-      _oledDisplay->setLine(1, message, TRANSIENT, NOT_BLINKING);
-      _config->setName((const char*)root["name"]);
-      _config->saveToEeprom(); // TODO: partial save !!   
-      _oledDisplay->setTitle(_config->getName());
+      sprintf(message, "Renaming to %s\n", (const char*)root["name"] ); 
+     _oledDisplay->setLine(1, message, TRANSIENT, NOT_BLINKING);
+      config->setName((const char*)root["name"]);
+      config->saveToEeprom(); // TODO: partial save !!   
+     _oledDisplay->setTitle(config->getName());
     }    
     sendJson("{}", 200);   // HTTP code 200 is enough
+  });  
+
+#ifdef XIOT_MASTER
+  server->on("/api/list", HTTP_GET, []() {
+    int size = agentCollection->getCount();
+    int customStrSize = 0;
+    
+    // Size estimation: https://arduinojson.org/assistant/
+    // TODO: update this when necessary : 10 fields per agent (for now it's actually 8)
+    const size_t bufferSize = size*JSON_OBJECT_SIZE(10)
+                              + JSON_OBJECT_SIZE(size)
+                              +  + JSON_OBJECT_SIZE(1) ;
+    
+    DynamicJsonBuffer jsonBuffer(bufferSize);
+    JsonObject& root = jsonBuffer.createObject();    
+    JsonObject& agentList = root.createNestedObject("agentList");
+    
+    agentCollection->list(agentList, &customStrSize);
+ 
+    char* strBuffer = (char *)malloc(customStrSize); 
+    root.printTo(strBuffer, customStrSize-1);
+    Serial.printf("Reserved size: %d, actual size: %d\n", customStrSize, strlen(strBuffer));
+    sendJson(strBuffer, 200);
+    free(strBuffer); 
+
+    uint32_t freeMem = system_get_free_heap_size();
+    Serial.printf("%s After /api/list Free heap mem: %d\n", NTP.getTimeDateString().c_str(), freeMem);   
+  });
+  /**
+   * This endpoint allows agent modules to register themselves to master when they initialize
+   */
+  server->on("/api/register", HTTP_POST, [](){
+    char *jsonString;
+    Serial.println("Registering module");
+    // This will allocate jsonString
+    XUtils::stringToCharP(server->arg("plain"), &jsonString);
+    // agentCollection->add method need to copy the data since jsonString will be freed.
+    Serial.println(jsonString); 
+    Agent* agent = agentCollection->add(jsonString);
+    free(jsonString);
+    if(agent == NULL) {
+      sendJson("{}", 500);
+     _oledDisplay->setLine(1, "Registration failed", TRANSIENT, NOT_BLINKING);
+    } else {
+      sendJson("{}", 200);
+      if(agent->getToRename()) {
+        agentToRename = agent;
+      }
+    }
+    char message[100];
+    sprintf(message, "Registered modules: %d", agentCollection->getCount());
+   _oledDisplay->setLine(2, message, NOT_TRANSIENT, NOT_BLINKING);    
   });
 
+  /**
+   * This endpoint allows removing a module
+   */
+  server->on("/api/register", HTTP_DELETE, [](){
+    char *jsonString;
+    Serial.println("Unregistering module");
+
+  });
+
+  // This endpoint is used by modules when they want to update data in the agent collection
+  // (which is the data that the UI is polling)
+  server->on("/api/refresh", HTTP_POST, [](){
+    char *jsonString;
+    Serial.println("Refreshing module");
+    // This will allocate jsonString
+    XUtils::stringToCharP(server->arg("plain"), &jsonString);
+    // agentCollection->add method need to copy the data since jsonString will be freed.
+    Serial.println(jsonString); 
+    Agent* agent = agentCollection->refresh(jsonString);
+    free(jsonString);
+    if(agent == NULL) {
+      sendJson("{}", 500);
+     _oledDisplay->setLine(1, "Refreshing failed", TRANSIENT, NOT_BLINKING);
+    } else {
+      sendJson("{}", 200);
+    }          
+  });
+  
+  // TODO: remove this or make it better. Needed during dev
+  // reset may be only possible by SMS from admin number ?
+  server->on("/api/swarmReset",  HTTP_GET, [](){
+    Serial.println("Rq on /swarmReset");
+    agentCollection->reset();
+    config->initFromDefault();
+    config->saveToEeprom();
+    sendJson("{}", 200);
+    gsm.sendSMS(config->getAdminNumber(), "Reset done");  // 
+    WiFi.mode(WIFI_AP);
+    initSoftAP();  
+  });
+
+#endif  
   // Return this module's custom data if any
   // Almost like ping request except for heap size. Is it worth it ? Could be exact same... 
   _server->on("/api/data", HTTP_GET, [&]() {
@@ -177,25 +290,36 @@ void XIOTModule::addModuleEndpoints() {
     String forwardTo = _server->header("Xiot-forward-to");
     String jsonBody = _server->arg("plain");
     int httpCode = 200;
-    char ssid[SSID_MAX_LENGTH];
-    char pwd[PWD_MAX_LENGTH];
-    const int bufferSize = JSON_OBJECT_SIZE(2) + 15 + SSID_MAX_LENGTH + PWD_MAX_LENGTH;
-    StaticJsonBuffer<bufferSize> jsonBuffer;      
-    JsonObject& root = jsonBuffer.parseObject(jsonBody); 
-    if (!root.success()) {
-      sendJson("{}", 500);
-      _oledDisplay->setLine(1, "Ota setup failed", TRANSIENT, NOT_BLINKING);
-      return;
+    if(forwardTo.length() != 0) {
+      #ifdef XIOT_MASTER    
+      Serial.print("Forwarding ota to ");
+      Serial.println(forwardTo);
+      char message[SSID_MAX_LENGTH + PWD_MAX_LENGTH + 40];
+      sprintf(message, "{\"%s\":\"%s\",\"%s\":\"%s\"}", XIOTModuleJsonTag::ssid, config->getHomeSsid(), XIOTModuleJsonTag::pwd, config->getHomePwd());
+      APIPost(forwardTo, "/api/ota", message, &httpCode, NULL, 0);
+      #endif
+      // TODO warn if not a master
+    } else {        
+      const int bufferSize = JSON_OBJECT_SIZE(2) + 15 + SSID_MAX_LENGTH + PWD_MAX_LENGTH;
+      StaticJsonBuffer<bufferSize> jsonBuffer;      
+      JsonObject& root = jsonBuffer.parseObject(jsonBody); 
+      if (!root.success()) {
+        sendJson("{}", 500);
+        _oledDisplay->setLine(1, "Ota setup failed", TRANSIENT, NOT_BLINKING);
+        return;
+      }
+      const char *ssidp = (const char*)root[XIOTModuleJsonTag::ssid];
+      const char *pwdp = (const char*)root[XIOTModuleJsonTag::pwd];
+      // OTA on master does not send the home ssid, master has it in config
+      #ifdef XIOT_MASTER
+      if(ssidp )= NULL)
+        ssidp = config->getHomeSsid();
+      if(pwdp == NULL)
+        pwdp = config->getHomePwd();
+      #endif
+  
+      httpCode = startOTA(ssidp, pwdp);
     }
-    const char *ssidp = (const char*)root[XIOTModuleJsonTag::ssid];
-    const char *pwdp = (const char*)root[XIOTModuleJsonTag::pwd];
-//    if(ssidp != NULL)
-//      strlcpy(ssid, ssidp, sizeof(ssid));
-//
-//    if(pwdp != NULL)
-//      strlcpy(pwd, pwdp, sizeof(pwd));
-
-    httpCode = startOTA(ssidp, pwdp);
     sendJson("{}", httpCode);      
   });
     
@@ -603,6 +727,8 @@ void XIOTModule::sendText(const char* msg, int code) {
  * Or you need to handle these by yourself. 
  */
 void XIOTModule::loop() {
+  unsigned int timeNow = millis();
+  
   now(); // Needed to update the clock from the TimeLib library
   // (and used by NTP library)
       
@@ -615,7 +741,22 @@ void XIOTModule::loop() {
     return;
   }
   
-  unsigned int timeNow = millis();
+  // check if any new added agent needs to be renamed
+  //  TODO: get rid of this ? handle it in agentCollection
+  #ifdef XIOT_MASTER
+  if(agentToRename != NULL) {
+    agentCollection->autoRename(agentToRename);
+    agentToRename = NULL;
+  }
+      
+  if(timeNow - timeLastPing >= MIN_PING_PERIOD*1000) {
+    timeLastPing = timeNow; 
+    agentCollection->ping();
+    uint32_t freeMem = system_get_free_heap_size();
+    Serial.printf("%s After ping Free heap mem: %d\n", NTP.getTimeDateString().c_str(), freeMem);  
+  }
+  #endif
+    
   // Should we get the config from master ?
   if(_wifiConnected && _canQueryMasterConfig && (timeNow - _timeLastGetConfig >= 5000)) {
     _timeLastGetConfig = timeNow;

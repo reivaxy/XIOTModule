@@ -18,6 +18,10 @@
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 
+#ifdef XIOT_MASTER
+#include "AgentCollection.h"
+#endif
+
 extern "C" {
   #include "user_interface.h"  // Allow getting heap size
 }
@@ -107,7 +111,12 @@ public:
   int startOTA(const char* ssid, const char*pwd);
   
 protected:
-  bool _isMaster = false;
+#ifdef XIOT_MASTER
+  AgentCollection *agentCollection;
+  Agent* agentToRename = NULL;
+  time_t timeLastPing = 0;
+
+#endif
   void setMaster(bool);
   void _connectSTA();  
   void _processPostPut();
