@@ -86,7 +86,7 @@ public:
   virtual void customRegistered(bool isSuccess);
   virtual void customGotConfig(bool isSuccess);
   virtual bool customBeforeOTA();
-  virtual void customOnStaGotIpHandled(WiFiEventStationModeGotIP ipInfo);
+  virtual void customOnStaGotIpHandler(WiFiEventStationModeGotIP ipInfo);
   
   DisplayClass* getDisplay();
   ESP8266WebServer* getServer();

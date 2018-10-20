@@ -76,7 +76,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
       if(strcmp(DEFAULT_APPWD, _config->getPwd()) != 0) {
         _canRegister = true;
       }
-      customOnStaGotIpHandled(ipInfo);
+      customOnStaGotIpHandler(ipInfo);
     }
   }); 
   
@@ -677,7 +677,7 @@ void XIOTModule::customGotConfig(bool isSuccess) {
 void XIOTModule::customRegistered(bool isSuccess) {
   // Override this method to implement your post registration init process
 }
-void XIOTModule::customOnStaGotIpHandled(WiFiEventStationModeGotIP ipInfo) {
+void XIOTModule::customOnStaGotIpHandler(WiFiEventStationModeGotIP ipInfo) {
   // Override this method to implement process once module is connected
 }
 
