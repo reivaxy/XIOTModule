@@ -182,8 +182,11 @@ void XIOTModule::addModuleEndpoints() {
     int httpCode = 200;
     char ssid[SSID_MAX_LENGTH];
     char pwd[PWD_MAX_LENGTH];
+    _oledDisplay->resetLinesAndIcons(); 
+    _oledDisplay->setLineAlignment(2, TEXT_ALIGN_CENTER);
+  
     const int bufferSize = JSON_OBJECT_SIZE(2) + 15 + SSID_MAX_LENGTH + PWD_MAX_LENGTH;
-    StaticJsonBuffer<bufferSize> jsonBuffer;      
+    StaticJsonBuffer<bufferSize> jsonBuffer;   
     JsonObject& root = jsonBuffer.parseObject(jsonBody); 
     if (!root.success()) {
       sendJson("{}", 500);
@@ -496,8 +499,12 @@ void XIOTModule::_setupOTA() {
   });  
   ArduinoOTA.onProgress([&](unsigned int progress, unsigned int total) {
     char message[50];
+    if(progress == total) {
+      _oledDisplay->setLine(1, "Flashing...", NOT_TRANSIENT, BLINKING);
+    }
     sprintf(message, "Progress: %u%%", (progress / (total / 100)));
     _oledDisplay->setLine(2, message, NOT_TRANSIENT, NOT_BLINKING);
+  
     _oledDisplay->refresh();
   });
   ArduinoOTA.onError([&](ota_error_t error) {
