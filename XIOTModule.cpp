@@ -18,6 +18,7 @@ const char* XIOTModuleJsonTag::MAC = "MAC";
 const char* XIOTModuleJsonTag::canSleep = "canSleep";
 const char* XIOTModuleJsonTag::uiClassName = "uiClassName";
 const char* XIOTModuleJsonTag::custom = "custom";
+const char* XIOTModuleJsonTag::globalStatus = "globalStatus";
 const char* XIOTModuleJsonTag::connected = "connected";
 const char* XIOTModuleJsonTag::heap = "heap";
 const char* XIOTModuleJsonTag::pingPeriod = "pingPeriod";
@@ -152,16 +153,33 @@ void XIOTModule::addModuleEndpoints() {
   // Return this module's custom data if any
   // Almost like ping request except for heap size. Is it worth it ? Could be exact same... 
   _server->on("/api/data", HTTP_GET, [&]() {
-    sendData(true);
+    String forwardTo = _server->header("Xiot-forward-to");
+    int httpCode;
+    if(forwardTo.length() != 0) {    
+      Serial.print("Forwarding GET /api/data to ");
+      Serial.println(forwardTo);
+      char message[1000];
+      APIGet(forwardTo, "/api/data", &httpCode, message, 1000);
+      if(httpCode == 200) {
+        sendJson(message, httpCode);
+      }
+    } else {  
+      sendData(true);
+    }
   });
   
   // The BackBone framework uses PUT to save data from UI to modules  
   _server->on("/api/data", HTTP_PUT, [&]() {
     _processPostPut();
   });
+  
   // But the modules can't PUT, they POST: handle both
   _server->on("/api/data", HTTP_POST, [&]() {
     _processPostPut();
+  });
+      
+  _server->on("/api/sms", HTTP_POST, [&]() {
+    _processSMS();
   });
       
   _server->on("/api/restart", HTTP_GET, [&](){
@@ -182,7 +200,7 @@ void XIOTModule::addModuleEndpoints() {
     int httpCode = 200;
     char ssid[SSID_MAX_LENGTH];
     char pwd[PWD_MAX_LENGTH];
-    _oledDisplay->resetLinesAndIcons(); 
+    _oledDisplay->init(); 
     _oledDisplay->setLineAlignment(2, TEXT_ALIGN_CENTER);
   
     const int bufferSize = JSON_OBJECT_SIZE(2) + 15 + SSID_MAX_LENGTH + PWD_MAX_LENGTH;
@@ -203,7 +221,7 @@ void XIOTModule::addModuleEndpoints() {
 }    
 
 // This is responding to api/ping and api/data (for symmetry with put/post on api/data)
-// This is also when refreshing data
+// This is also when refreshing data: not responding to a request but posting to master.
 int XIOTModule::sendData(bool isResponse) {
   int httpCode = 200;
   const int bufferSize = JSON_OBJECT_SIZE(3);
@@ -216,11 +234,24 @@ int XIOTModule::sendData(bool isResponse) {
   Serial.printf("Free heap mem: %d\n", freeMem);  
   root[XIOTModuleJsonTag::heap] = freeMem ;
   
+  int payloadSize = 100; // for all curly brackets, comas, quotes, ... (2 or 3 attributes max) // TODO : improve
   char *customData = _customData();
-  int payloadSize = 100; // for all curly brackets, comas, quotes, ... (2 or 3 attributes max)
   if(customData) {
-    root[XIOTModuleJsonTag::custom] = customData ;
-    payloadSize += strlen(customData);
+    if(strlen(customData) < MAX_CUSTOM_DATA_SIZE) {
+      root[XIOTModuleJsonTag::custom] = customData ;     
+      payloadSize += strlen(customData);
+    } else {
+      _oledDisplay->setLine(1, "Custom Data too big", TRANSIENT, NOT_BLINKING);
+      root[XIOTModuleJsonTag::custom] = CUSTOM_DATA_TOO_BIG_VALUE;
+      payloadSize += strlen(CUSTOM_DATA_TOO_BIG_VALUE);
+    }  
+  }
+  // global status is not in custom data since custom data should never be deserialized by master
+  // global status is a quick access to the module status (on, off, ok, error, alert, ...)
+  char *globalStatus = _globalStatus();
+  if(globalStatus) {
+    root[XIOTModuleJsonTag::globalStatus] = globalStatus ;   // TODO check length vs MAX_GLOBAL_STATUS_SIZE, just like customData
+    payloadSize += strlen(globalStatus);
   }
   // If this is a refresh request (not a ping response), we need to include the MAC address
   if(!isResponse) {
@@ -233,10 +264,13 @@ int XIOTModule::sendData(bool isResponse) {
   char* payloadStr = (char *) malloc(payloadSize);
   root.printTo(payloadStr, payloadSize);
   if(isResponse) {
+    Serial.printf("Response: %s\n", payloadStr);
     sendJson(payloadStr, httpCode);
   } else {
+    Serial.printf("Payload: %s\n", payloadStr);
     masterAPIPost("/api/refresh", String(payloadStr), &httpCode, NULL, 0);
   }
+  free(globalStatus);
   free(customData);
   free(payloadStr);
   return httpCode;
@@ -264,6 +298,33 @@ void XIOTModule::_processPostPut() {
   free(response);        
   free(bodyStr);   
 }
+
+void XIOTModule::_processSMS() {
+  String jsonBody = _server->arg("plain");
+  Serial.println(jsonBody); 
+  const int bufferSize = JSON_OBJECT_SIZE(3) ; 
+  StaticJsonBuffer<bufferSize> jsonBuffer;
+  JsonObject& root = jsonBuffer.parseObject(const_cast<char*>(jsonBody.c_str())); 
+  if (!root.success()) {
+    sendJson("{}", 500);
+    _oledDisplay->setLine(1, "SMS bad payload", TRANSIENT, NOT_BLINKING);
+    return;
+  }
+  const char *message = (const char*)root["message"];       
+  const char *phoneNumber = (const char*)root["phoneNumber"];       
+  const bool isAdmin = (const bool)root["isAdmin"];
+         
+  bool success = customProcessSMS(phoneNumber, isAdmin, message);
+  if(success) {
+    char *payload = _buildFullPayload();
+    sendJson(payload, 200);
+    free(payload);
+  } else {
+    sendText("", 500);
+  } 
+
+}    
+
 
 /**
  * Connects to the SSID read in config
@@ -329,19 +390,42 @@ void XIOTModule::_getConfigFromMaster() {
  */
 void XIOTModule::_register() {
   int httpCode;
-  char message[JSON_STRING_CONFIG_SIZE];
-  char macAddrStr[100];
+  _oledDisplay->setLine(1, "Registering", TRANSIENT, NOT_BLINKING);
+  _wifiDisplay();
+  char* payload = _buildFullPayload();
+    
+  //Serial.println(message);
+  masterAPIPost("/api/register", payload, &httpCode);
+  if(httpCode == 200) {
+    _canRegister = false;
+    _oledDisplay->setLine(1, "Registered", TRANSIENT, NOT_BLINKING);
+    customRegistered(true);
+  } else {
+    _oledDisplay->setLine(1, "Registration failed", TRANSIENT, NOT_BLINKING);
+    customRegistered(false);
+  }
+  free(payload);
+}
+
+/**
+ * Returns a malloced string with config
+ * Caller needs to free it
+ */
+char* XIOTModule::_buildFullPayload() {
+  char macAddrStr[20];
   uint8_t macAddr[6];
   WiFi.macAddress(macAddr);
   sprintf(macAddrStr, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]);
-  _oledDisplay->setLine(1, "Registering", TRANSIENT, NOT_BLINKING);
-  _wifiDisplay();
   StaticJsonBuffer<JSON_BUFFER_CONFIG_SIZE> jsonBuffer;
   JsonObject& root = jsonBuffer.createObject();
   root[XIOTModuleJsonTag::name] = _config->getName();
   root[XIOTModuleJsonTag::ip] = _localIP;
   root[XIOTModuleJsonTag::MAC] = macAddrStr;
   root[XIOTModuleJsonTag::uiClassName] = _config->getUiClassName();
+  char *globalStatus = _globalStatus();
+  if(globalStatus) {  
+    root[XIOTModuleJsonTag::globalStatus] = globalStatus;
+  }
   uint32_t freeMem = system_get_free_heap_size();
   Serial.printf("Free heap mem: %d\n", freeMem);
   root[XIOTModuleJsonTag::heap] = freeMem;
@@ -366,19 +450,11 @@ void XIOTModule::_register() {
       root[XIOTModuleJsonTag::custom] = CUSTOM_DATA_TOO_BIG_VALUE;
     }
   }
-  root.printTo(message, JSON_STRING_CONFIG_SIZE);
+  char* payload = (char*)malloc(JSON_STRING_CONFIG_SIZE);   // TODO: improve ?
+  root.printTo(payload, JSON_STRING_CONFIG_SIZE);
   free(customPayload);
-
-  //Serial.println(message);
-  masterAPIPost("/api/register", message, &httpCode);
-  if(httpCode == 200) {
-    _canRegister = false;
-    _oledDisplay->setLine(1, "Registered", TRANSIENT, NOT_BLINKING);
-    customRegistered(true);
-  } else {
-    _oledDisplay->setLine(1, "Registration failed", TRANSIENT, NOT_BLINKING);
-    customRegistered(false);
-  }
+  free(globalStatus);
+  return payload;
 }
 
 // Use this method to refresh the module's data on master
@@ -391,6 +467,16 @@ int XIOTModule::_refreshMaster() {
 // and in response to GET /api/ping, and in response to GET /api/data
 char* XIOTModule::_customData() {
   return NULL;
+}
+
+// This method should be overloaded in modules that need to provide a global status (OK, ALERT, ON, OFF...)
+char* XIOTModule::_globalStatus() {
+  return NULL;
+}
+
+// This method should be overloaded in modules that need to process SMS messages
+bool XIOTModule::customProcessSMS(const char* phoneNumber, const bool isAdmin, const char* message) {
+  return true;
 }
 
 // This method should be overloaded in modules that need to process info from the UI

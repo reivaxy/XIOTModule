@@ -31,6 +31,10 @@ extern "C" {
 #endif
 
 // Max length authorized for modules custom data
+#define MAX_GLOBAL_STATUS_SIZE 30
+// String used to replace a too long global status
+#define GLOBAL_STATUS_TOO_BIG_VALUE "GLOBAL_STATUS_TOO_BIG"  // needs to be less than MAX_GLOBAL_STATUS_SIZE-1 characters
+
 #define MAX_CUSTOM_DATA_SIZE 200
 // String used to replace a too long custom value
 #define CUSTOM_DATA_TOO_BIG_VALUE "CUSTOM_DATA_TOO_BIG_REMOVED"
@@ -64,6 +68,7 @@ public:
   static const char* canSleep;
   static const char* uiClassName;
   static const char* custom;
+  static const char* globalStatus;
   static const char* connected;
   static const char* heap;
   static const char* pingPeriod;
@@ -112,15 +117,19 @@ protected:
   void _connectSTA();  
   void _processPostPut();
   void _setupOTA();
+  char* _buildFullPayload();
   void _initDisplay(int displayAddr, int displaySda, int displayScl, bool flipScreen = true, uint8_t brightness = 100);
+  void _processSMS();
   virtual void _timeDisplay();
   virtual void _wifiDisplay();
   virtual void _getConfigFromMaster();
   virtual void _register();
   virtual char* _customData();
+  virtual char* _globalStatus();
   virtual char* useData(char* data, int* responseCode);
   virtual char* emptyMallocedResponse();
   virtual int _refreshMaster();
+  virtual bool customProcessSMS(const char* phoneNumber, const bool isAdmin, const char* message);
   
   ModuleConfigClass* _config;
   bool _otaIsStarted = false;
