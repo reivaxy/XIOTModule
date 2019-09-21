@@ -220,58 +220,18 @@ void XIOTModule::addModuleEndpoints() {
   _server->begin();
 }    
 
-// This is responding to api/ping and api/data (for symmetry with put/post on api/data)
+// This is responding to api/ping and api/data (for GET symmetry with put/post on api/data)
 // This is also when refreshing data: not responding to a request but posting to master.
 int XIOTModule::sendData(bool isResponse) {
   int httpCode = 200;
-  const int bufferSize = JSON_OBJECT_SIZE(3);
-  StaticJsonBuffer<bufferSize> jsonBuffer;
-  JsonObject& root = jsonBuffer.createObject();
-  char macAddrStr[80]; // musn't be declared in the if !response block: would be "freed" too soon
-  
-  // Return heap size for health monitoring
-  uint32_t freeMem = system_get_free_heap_size();
-  Serial.printf("Free heap mem: %d\n", freeMem);  
-  root[XIOTModuleJsonTag::heap] = freeMem ;
-  
-  int payloadSize = 100; // for all curly brackets, comas, quotes, ... (2 or 3 attributes max) // TODO : improve
-  char *customData = _customData();
-  if(customData) {
-    if(strlen(customData) < MAX_CUSTOM_DATA_SIZE) {
-      root[XIOTModuleJsonTag::custom] = customData ;     
-      payloadSize += strlen(customData);
-    } else {
-      _oledDisplay->setLine(1, "Custom Data too big", TRANSIENT, NOT_BLINKING);
-      root[XIOTModuleJsonTag::custom] = CUSTOM_DATA_TOO_BIG_VALUE;
-      payloadSize += strlen(CUSTOM_DATA_TOO_BIG_VALUE);
-    }  
-  }
-  // global status is not in custom data since custom data should never be deserialized by master
-  // global status is a quick access to the module status (on, off, ok, error, alert, ...)
-  char *globalStatus = _globalStatus();
-  if(globalStatus) {
-    root[XIOTModuleJsonTag::globalStatus] = globalStatus ;   // TODO check length vs MAX_GLOBAL_STATUS_SIZE, just like customData
-    payloadSize += strlen(globalStatus);
-  }
-  // If this is a refresh request (not a ping response), we need to include the MAC address
-  if(!isResponse) {
-    uint8_t macAddr[6];
-    WiFi.macAddress(macAddr);
-    sprintf(macAddrStr, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]);
-    root[XIOTModuleJsonTag::MAC] = macAddrStr ;
-    payloadSize += strlen(macAddrStr);
-  }
-  char* payloadStr = (char *) malloc(payloadSize);
-  root.printTo(payloadStr, payloadSize);
+  char *payloadStr = _buildFullPayload();
   if(isResponse) {
     Serial.printf("Response: %s\n", payloadStr);
     sendJson(payloadStr, httpCode);
   } else {
     Serial.printf("Payload: %s\n", payloadStr);
     masterAPIPost("/api/refresh", String(payloadStr), &httpCode, NULL, 0);
-  }
-  free(globalStatus);
-  free(customData);
+  }  
   free(payloadStr);
   return httpCode;
 }
@@ -291,8 +251,14 @@ void XIOTModule::_processPostPut() {
     APIPost(forwardTo, "/api/data", body, &httpCode, response, 1000);
   } else {
     response = useData(bodyStr, &httpCode);  // Each module subclass should override this if it expects any data from the UI.
-    // We'll refresh the data on master once this request callback is done
+    // For now the response can't be used by master to update its agent collecting
+    // This will be done when master subclasses XIOTModule... 
+    // So for now we'll refresh the data on master after this request callback is done
     _refreshNeeded = true;      
+  }
+
+  if(response == NULL) {
+    response = _buildFullPayload();
   }
   sendJson(response, httpCode);
   free(response);        
