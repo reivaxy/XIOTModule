@@ -126,7 +126,7 @@ protected:
   virtual void _register();
   virtual char* _customData();
   virtual char* _globalStatus();
-  virtual char* useData(char* data, int* responseCode);
+  virtual char* useData(const char* data, int* responseCode);
   virtual char* emptyMallocedResponse();
   virtual int _refreshMaster();
   virtual bool customProcessSMS(const char* phoneNumber, const bool isAdmin, const char* message);

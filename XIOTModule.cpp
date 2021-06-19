@@ -190,6 +190,8 @@ void XIOTModule::addModuleEndpoints() {
       Serial.println(forwardTo);
       APIGet(forwardTo, "/api/restart", &httpCode, NULL, 0);
     } else {
+      sendHtml("restarting", 200);
+      delay(300);
       ESP.restart();     
     }
   });
@@ -240,8 +242,7 @@ void XIOTModule::_processPostPut() {
   String forwardTo = _server->header("Xiot-forward-to");
   String body = _server->arg("plain");
   int httpCode;
-  char *bodyStr, *response;
-  XUtils::stringToCharP(body, &bodyStr);
+  char *response = NULL;
   
   if(forwardTo.length() != 0) {    
     Serial.print("Forwarding data to ");
@@ -250,8 +251,8 @@ void XIOTModule::_processPostPut() {
     *response = 0;
     APIPost(forwardTo, "/api/data", body, &httpCode, response, 1000);
   } else {
-    response = useData(bodyStr, &httpCode);  // Each module subclass should override this if it expects any data from the UI.
-    // For now the response can't be used by master to update its agent collecting
+    response = useData(body.c_str(), &httpCode);  // Each module subclass should override this if it expects any data from the UI.
+    // For now the response can't be used by master to update its agent collection
     // This will be done when master subclasses XIOTModule... 
     // So for now we'll refresh the data on master after this request callback is done
     _refreshNeeded = true;      
@@ -262,7 +263,6 @@ void XIOTModule::_processPostPut() {
   }
   sendJson(response, httpCode);
   free(response);        
-  free(bodyStr);   
 }
 
 void XIOTModule::_processSMS() {
@@ -448,7 +448,7 @@ bool XIOTModule::customProcessSMS(const char* phoneNumber, const bool isAdmin, c
 // This method should be overloaded in modules that need to process info from the UI
 // (sent by POST /get/data) 
 // Needs to return a malloc'ed char *
-char* XIOTModule::useData(char* data, int* httpCode) {
+char* XIOTModule::useData(const char* data, int* httpCode) {
   *httpCode = 200;
   return emptyMallocedResponse();
 }
@@ -517,20 +517,26 @@ void XIOTModule::APIPost(char* ipAddr, const char* path, String payload, int* ht
   APIPost(ipAddrString, path, payload, httpCode, jsonString, maxLen);
 }
 
-void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* httpCode, char *jsonString, int maxLen) {
+void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* httpCode, char *response, int maxLen) {
   Debug("XIOTModule::APIPost\n");
 //  Serial.println(ipAddr);
   Serial.println(path);
+  WiFiClient client;
   HTTPClient http;
-  http.begin(ipAddr, 80, path);
+  http.begin(client, ipAddr, 80, path);
   *httpCode = http.POST(payload);
-  if(*httpCode <= 0) {
+  if (*httpCode <= 0) {
     Serial.printf("HTTP POST failed, error: %s\n", http.errorToString(*httpCode).c_str());
+    if (response != NULL) {
+      strlcpy(response, http.errorToString(*httpCode).c_str(), maxLen);
+    }
     return;
   }
-  if(jsonString) {
+  if (response != NULL) {
+    int size = http.getSize();
+    Serial.printf("Response size is %d\n", size);
     String jsonResultStr = http.getString();
-    strlcpy(jsonString, jsonResultStr.c_str(), maxLen);
+    jsonResultStr.toCharArray(response, size);
   }
   http.end();
 }
