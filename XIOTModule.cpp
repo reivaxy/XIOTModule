@@ -482,7 +482,9 @@ void XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode) {
 void XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode, char *jsonString, int maxLen) {
   Debug("XIOTModule::APIGet\n");
   HTTPClient http;
-  http.begin(ipAddr, 80, path);
+  WiFiClient client;
+  http.begin(client, ipAddr, 80, path);
+  
   *httpCode = http.GET();
   if(*httpCode <= 0) {
     Serial.printf("HTTP GET failed, error: %s\n", http.errorToString(*httpCode).c_str());
