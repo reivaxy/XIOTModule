@@ -1,6 +1,6 @@
 /**
- *  Common stuff for iotinator master and slave modules 
- *  Xavier Grosjean 2018
+ *  Common stuff for iotinator master and agent modules 
+ *  Xavier Grosjean 2021
  *  Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License
  */
 
@@ -17,12 +17,14 @@
 #include <XUtils.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+#include <NtpClientLib.h>
+
 
 extern "C" {
   #include "user_interface.h"  // Allow getting heap size
 }
 
-//#define DEBUG_XIOTMODULE // Uncomment this to enable debug messages over serial port
+#define DEBUG_XIOTMODULE // Uncomment this to enable debug messages over serial port
 
 #ifdef DEBUG_XIOTMODULE
 #define Debug(...) Serial.printf(__VA_ARGS__)
@@ -85,13 +87,28 @@ class XIOTModule {
 // TODO: sort out public/protected stuff, for now it does not really make any sense
 public:
   XIOTModule(DisplayClass *display, bool flipScreen = true, uint8_t brightness = 100);
-  XIOTModule(ModuleConfigClass* config, int addr, int sda, int scl, bool flipScreen = true, uint8_t brightness = 100);
+  XIOTModule(ModuleConfigClass* config, int addr, int sda, int scl, bool flipScreen = true, uint8_t brightness = 255);
   virtual void loop();
   virtual void customLoop();
   virtual void customRegistered(bool isSuccess);
   virtual void customGotConfig(bool isSuccess);
   virtual bool customBeforeOTA();
   virtual void customOnStaGotIpHandler(WiFiEventStationModeGotIP ipInfo);
+  virtual const char* customFormInitPage();
+  virtual const char* customPageInitPage();
+  virtual int customSaveConfig();
+
+  virtual bool customProcessSMS(const char* phoneNumber, const bool isAdmin, const char* message);
+  virtual int sendData(bool isResponse);
+  virtual void _timeDisplay();
+  virtual void _wifiDisplay();
+  virtual void _getConfigFromMaster();
+  virtual void _register();
+  virtual char* _customData();
+  virtual char* _globalStatus();
+  virtual char* useData(const char* data, int* responseCode);
+  virtual char* emptyMallocedResponse();
+  virtual int _refreshMaster();
   
   DisplayClass* getDisplay();
   ESP8266WebServer* getServer();
@@ -106,31 +123,23 @@ public:
   void sendText(const char* msg, int code);
   void sendHtml(const char* msg, int code);
   void sendJson(const char* msg, int code);
-  virtual int sendData(bool isResponse);
   void hideDateTime(bool);
   bool _hideDateTime = false;
   void addModuleEndpoints();
   bool isWaitingOTA();
   int startOTA(const char* ssid, const char*pwd);
-  
-protected:
+  void _initSoftAP();
+
   void _connectSTA();  
   void _processPostPut();
   void _setupOTA();
   char* _buildFullPayload();
   void _initDisplay(int displayAddr, int displaySda, int displayScl, bool flipScreen = true, uint8_t brightness = 100);
   void _processSMS();
-  virtual void _timeDisplay();
-  virtual void _wifiDisplay();
-  virtual void _getConfigFromMaster();
-  virtual void _register();
-  virtual char* _customData();
-  virtual char* _globalStatus();
-  virtual char* useData(const char* data, int* responseCode);
-  virtual char* emptyMallocedResponse();
-  virtual int _refreshMaster();
-  virtual bool customProcessSMS(const char* phoneNumber, const bool isAdmin, const char* message);
-  
+  const char* getSTASsid();
+  const char* getSTAPwd();
+  void processNtpEvent();
+ 
   ModuleConfigClass* _config;
   bool _otaIsStarted = false;
   time_t _otaReadyTime = 0;
@@ -146,4 +155,12 @@ protected:
   bool _timeInitialized = false;  
   bool _refreshNeeded = false;  
   char *_localIP = NULL;
+  bool _ntpEventToProcess = false;
+  bool _ntpServerInitialized = false;
+  bool _ntpTimeInitialized = false;
+  bool _ntpListenerInitialized = false;
+
+  NTPSyncEvent_t _ntpEvent;
+
+
 };

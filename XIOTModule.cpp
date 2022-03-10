@@ -1,6 +1,11 @@
-
+/**
+*  base class for all iotinator agents (and some day master too)
+*  Xavier Grosjean 2021
+*  Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License
+*/
 
 #include "XIOTModule.h"
+#include <XIOTInitPageHtml.h>
 
 const char* XIOTModuleJsonTag::timestamp = "timestamp";
 const char* XIOTModuleJsonTag::APInitialized = "APInitialized";
@@ -30,7 +35,6 @@ const char* XIOTModuleJsonTag::registeringTime = "regTime";
  */
 XIOTModule::XIOTModule(DisplayClass *display, bool flipScreen, uint8_t brightness) {
   WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
-//  _setupOTA();
   _oledDisplay = display;
   _server = new ESP8266WebServer(80);
 }
@@ -40,7 +44,6 @@ XIOTModule::XIOTModule(DisplayClass *display, bool flipScreen, uint8_t brightnes
  */
 XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl, bool flipScreen, uint8_t brightness) {
   WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
-//  _setupOTA();
   _config = config;
   Serial.print("Initializing module ");
   Serial.println(config->getName());
@@ -53,11 +56,17 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
     _oledDisplay->alertIconOn(true);
   }  
   
-  // Initialize the web server for the API
+  // Initialize the web server for the API and config page
   _server = new ESP8266WebServer(80);
 
   addModuleEndpoints();
   
+  NTP.onNTPSyncEvent([&](NTPSyncEvent_t event) {
+    Serial.printf("NTP event: %d\n", event);
+    _ntpEventToProcess = true;
+    _ntpEvent = event;
+  });
+
   // Nb: & allows to keep the reference to the caller object in the lambda block
   _wifiSTAGotIpHandler = WiFi.onStationModeGotIP([&](WiFiEventStationModeGotIP ipInfo) {
     free(_localIP);
@@ -68,13 +77,23 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
       _oledDisplay->setLine(0, message, NOT_TRANSIENT, NOT_BLINKING);
       ArduinoOTA.begin();    
     } else {
-      Serial.printf("Got IP on %s: %s\n", _config->getSsid(), _localIP);
+      Serial.printf("Got IP on %s: %s\n", getSTASsid(), _localIP);
       _wifiConnected = true;
       _canQueryMasterConfig = true;
       _wifiDisplay();
       
-      // If connected to the customized SSID, module can register itself to master
-      if(strcmp(DEFAULT_APPWD, _config->getPwd()) != 0) {
+      // If autonomous, connected to internet through box ssid => need to fetch time from NTP server
+      if(_config->getIsAutonomous()) {       
+        _ntpServerInitialized = true;
+        Debug("Fetching time from %s\n", _config->getNtpServer());
+        NTP.begin(_config->getNtpServer(), _config->getGmtHourOffset(), true, _config->getGmtMinOffset());
+        NTP.setInterval(63, 7200);  // 63s retry, 2h refresh. Firt try usually fails, second usually works.
+        // TODO: can this be improved so that we need not update the config twice a year?
+        // NTP.setTimeZone(_config->getGmtHourOffset(), _config->getGmtMinOffset());
+
+      } else if(strcmp(DEFAULT_XIOT_APPWD, _config->getXiotPwd()) != 0) {
+       // If non autonomous, module is connected to the customized SSID, and it can register itself to master
+        Serial.println("Non autonomous module ready to register");
         _canRegister = true;
       }
       customOnStaGotIpHandler(ipInfo);
@@ -90,13 +109,29 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
     }
   });
 
-  // Module is Wifi Station only
-  WiFi.mode(WIFI_STA);  
+  WiFi.mode(WIFI_AP_STA);  
+
   _connectSTA();
+  _initSoftAP();
 }
 
 ESP8266WebServer* XIOTModule::getServer() {
   return _server;
+}
+
+void XIOTModule::processNtpEvent() {
+  if (_ntpEvent) {
+    Debug("NTP Time Sync error: ");
+    if (_ntpEvent == noResponse)
+      Debug("NTP server not reachable\n");
+    else if (_ntpEvent == invalidAddress)
+      Debug("Invalid NTP server address\n");
+  } else {
+    Debug("Got NTP time: %s\n", NTP.getTimeDateString(NTP.getLastNTPSync()).c_str());
+    _ntpTimeInitialized = true;
+    _timeDisplay();
+    NTP.setInterval(7200, 7200);  // 5h retry, 2h refresh. once we have time, refresh failure is not critical
+  }
 }
 
 void XIOTModule::addModuleEndpoints() {
@@ -200,8 +235,6 @@ void XIOTModule::addModuleEndpoints() {
   _server->on("/api/ota", HTTP_POST, [&]() {
     String jsonBody = _server->arg("plain");
     int httpCode = 200;
-    char ssid[SSID_MAX_LENGTH];
-    char pwd[PWD_MAX_LENGTH];
     _oledDisplay->init(); 
     _oledDisplay->setLineAlignment(2, TEXT_ALIGN_CENTER);
   
@@ -218,7 +251,50 @@ void XIOTModule::addModuleEndpoints() {
     sendJson("{}", httpCode); // send reply before disconnecting/reconnecting.     
     httpCode = startOTA(ssidp, pwdp);
   });
-    
+
+  // Display config page.    
+  _server->on("/config", HTTP_GET, [&]() {
+    char page[2000];
+    sprintf(page, moduleInitPage, _config->getName(),
+                                  _config->getIsAutonomous()? "checked":"",
+                                  customFormInitPage(),
+                                  customPageInitPage());
+
+    sendHtml(page, 200);
+  });
+
+  _server->on("/api/saveConfig", HTTP_POST, [&]() {
+    int httpCode = 200;
+
+    // only save an ssid if its password is given
+    String xiotPwd = _server->arg("xiotPwd");
+    if (xiotPwd.length() > 0) {
+      String xiotSsid = _server->arg("xiotSsid");
+      if (xiotSsid.length() > 0) {
+        Debug("Saving Xiot SSID");
+        _config->setXiotPwd(xiotPwd.c_str());
+        _config->setXiotSsid(xiotSsid.c_str());
+      }
+    }
+    String boxPwd = _server->arg("boxPwd");
+    if (boxPwd.length() > 0) {
+      String boxSsid = _server->arg("boxSsid");
+      if (boxSsid.length() > 0) {
+        Debug("Saving Box SSID");
+        _config->setBoxPwd(boxPwd.c_str());
+        _config->setBoxSsid(boxSsid.c_str());
+      }
+    }
+
+    customSaveConfig();
+
+    _config->saveToEeprom();
+    sendHtml("Config saved", httpCode);
+
+    delay(1000);
+  });
+
+
   _server->begin();
 }    
 
@@ -294,16 +370,54 @@ void XIOTModule::_processSMS() {
 
 /**
  * Connects to the SSID read in config
+ * It's either the SSID exposed by master (for non autonomous agents)
+ * Or the one of the box (autonomous agents)
  */
 void XIOTModule::_connectSTA() {
   _canQueryMasterConfig = false;
   _canRegister = false;
   _wifiConnected = false;
-  Debug("XIOTModule::_connectSTA %s\n", _config->getSsid());
-  WiFi.begin(_config->getSsid(), _config->getPwd());
-  _wifiDisplay();
+  const char* ssid = getSTASsid();
+  if(*ssid != 0) {
+    Debug("XIOTModule::_connectSTA: %s\n", ssid);
+    WiFi.begin(getSTASsid(), getSTAPwd());
+    _wifiDisplay();
+  } else {
+    Debug("XIOTModule::_connectSTA: no ssid\n");
+  }
 }
 
+// Autonomous modules connect to the internet home box
+// Non Autonomous modules connect to the master exposed SSID
+const char* XIOTModule::getSTASsid() {
+  if (_config->getIsAutonomous()) {
+    return _config->getBoxSsid();
+  } else {
+    return _config->getXiotSsid();
+  }
+}
+
+// Autonomous modules connect to the internet home box
+// Non Autonomous modules connect to the master exposed SSID
+const char* XIOTModule::getSTAPwd() {
+  if (_config->getIsAutonomous()) {
+    return _config->getBoxPwd();
+  } else {
+    return _config->getXiotPwd();
+  }
+}
+
+// Opens the Wifi network Access Point.
+void XIOTModule::_initSoftAP() {
+  Debug("XIOTModule::_initSoftAP: %s\n", _config->getXiotSsid());
+  // IPAddress ip(192, 168, 4, 1);
+  // IPAddress gateway(192, 168, 4, 1);
+  // IPAddress subnet(255, 255, 255, 0);
+  // WiFi.softAPConfig(ip, gateway, subnet);
+  WiFi.softAP(_config->getXiotSsid(), _config->getXiotPwd(), 1, false, 8);
+  Serial.println(WiFi.softAPIP());
+  _wifiDisplay();
+}
 
 DisplayClass* XIOTModule::getDisplay() {
   return _oledDisplay;
@@ -335,15 +449,16 @@ void XIOTModule::_getConfigFromMaster() {
     _timeInitialized = true;
   }
   bool APInitialized = root[XIOTModuleJsonTag::APInitialized];
+
   // If access point on Master was customized, get its ssid and password,
   // Save them in EEProm
   if(APInitialized) {
     const char *ssid = root[XIOTModuleJsonTag::APSsid];
     const char *pwd = root[XIOTModuleJsonTag::APPwd];
     // If AP not same as the one in config, save it
-    if(strcmp(pwd, _config->getPwd()) != 0) {
-      _config->setSsid(ssid);
-      _config->setPwd(pwd);
+    if(strcmp(pwd, _config->getXiotPwd()) != 0) {
+      _config->setXiotSsid(ssid);
+      _config->setXiotPwd(pwd);
       _config->saveToEeprom();     // TODO: partial save only !!!
       _connectSTA();
     }
@@ -608,7 +723,7 @@ void XIOTModule::_initDisplay(int displayAddr, int displaySda, int displayScl, b
 }
 
 void XIOTModule::_timeDisplay() {
-//  Debug("XIOTModule::_timeDisplay\n");
+//  Debug("XIOTModule::_timeDisplay\n");  // commented out to not send to serial once per second ;)
   _oledDisplay->clockIcon(!_timeInitialized);
   if(_timeInitialized) {
     int h = hour();
@@ -632,12 +747,17 @@ void XIOTModule::_wifiDisplay() {
   bool blinkWifi = false;
 
   if(_wifiConnected) {
-    strcpy(message, _config->getSsid());
+    strcpy(message, _config->getXiotSsid());
     strcat(message, " ");
     strcat(message, _localIP);
-  } else {
-    sprintf(message, "Connecting to %s", _config->getSsid());
   }
+  if (_config->getIsAutonomous()) {
+    sprintf(message, "AP %s: %s", _config->getXiotSsid(), WiFi.softAPIP().toString().c_str());
+  } else {
+    sprintf(message, "Connecting to %s", _config->getXiotSsid());
+  }
+
+
   _oledDisplay->setLine(0, message);
   
   if (!_wifiConnected) {
@@ -672,6 +792,11 @@ void XIOTModule::loop() {
       
   // Check if any request to serve
   _server->handleClient();
+
+  if(_ntpEventToProcess) {
+    _ntpEventToProcess = false;
+    processNtpEvent();
+  }
     
   if(isWaitingOTA()) {  
     int remainingTime = 180 - ((millis() - _otaReadyTime) / 1000);
@@ -693,18 +818,24 @@ void XIOTModule::loop() {
   
   unsigned int timeNow = millis();
   // Should we get the config from master ?
-  if(_wifiConnected && _canQueryMasterConfig && (timeNow - _timeLastGetConfig >= 5000)) {
-    _timeLastGetConfig = timeNow;
-    _getConfigFromMaster();
-    _oledDisplay->refresh();
-    delay(300); // Otherwise message can't be read !
-  }
-  if(_wifiConnected && _canRegister && (timeNow - _timeLastRegister >= 5000)) {
-    _timeLastRegister = timeNow;
+  if(!_config->getIsAutonomous()) {
+    if(_wifiConnected && _canQueryMasterConfig && (timeNow - _timeLastGetConfig >= 5000)) {
+      _timeLastGetConfig = timeNow;
+      _getConfigFromMaster();
+      _oledDisplay->refresh();
+      delay(300); // Otherwise message can't be read !
+    }
+    if(_wifiConnected && _canRegister && (timeNow - _timeLastRegister >= 5000)) {
+      _timeLastRegister = timeNow;
+      _register(); 
     _register(); 
-    _oledDisplay->refresh();
-    delay(300); // Otherwise message can't be read !
+      _register(); 
+      _oledDisplay->refresh();
+      delay(300); // Otherwise message can't be read !
+    } 
   } 
+   
+  
   
   // Time on display should be refreshed every second
   // Intentionnally not using the value returned by now(), since it changes
@@ -716,9 +847,9 @@ void XIOTModule::loop() {
   if(_refreshNeeded) {
     int httpCode = _refreshMaster();
     // TODO: make sure we don't retry this every loop cycle
-    // if(httpCode == 200) {
+    if(httpCode == 200) {
       _refreshNeeded = false;
-    // }
+    }
   }
   
   customLoop();
@@ -750,6 +881,21 @@ bool XIOTModule::customBeforeOTA() {
   // Override this method to implement custom processing before initiating OTA.
   // You can block it returning false.
   return true;
+}
+
+const char* XIOTModule::customFormInitPage() {
+  // Override this method to implement custom fields to be displayed in config form
+  return "";
+}
+
+const char* XIOTModule::customPageInitPage() {
+  // Override this method to implement custom config page to be displayed in config page
+  return "";
+}
+
+int XIOTModule::customSaveConfig() {
+  // Override this method to implement custom config page to be displayed in config page  
+  return 200;
 }
 
 
