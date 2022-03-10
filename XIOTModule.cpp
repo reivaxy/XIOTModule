@@ -72,8 +72,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
 
   // Nb: & allows to keep the reference to the caller object in the lambda block
   _wifiSTAGotIpHandler = WiFi.onStationModeGotIP([&](WiFiEventStationModeGotIP ipInfo) {
-    free(_localIP);
-    XUtils::stringToCharP(ipInfo.ip.toString(), &_localIP);
+    strcpy(_localIP, ipInfo.ip.toString().c_str());
     if(isWaitingOTA()) {
       char message[30];
       sprintf(message, "OTA ready: %s", _localIP);
@@ -134,14 +133,14 @@ void XIOTModule::processNtpEvent() {
       Debug("Invalid NTP server address\n");
   } else {
     Debug("NTP time: %s\n", NTP.getTimeDateString(NTP.getLastNTPSync()).c_str());
-    _ntpTimeInitialized = true;
+    _timeInitialized = true;
     _timeDisplay();
     NTP.setInterval(7200, 7200);  // 5h retry, 2h refresh. once we have time, refresh failure is not critical
   }
 }
 
 bool XIOTModule::isTimeInitialized() {
-  return _ntpTimeInitialized;
+  return _timeInitialized;
 }
 void XIOTModule::addModuleEndpoints() {
   // list of headers we want to be able to read
@@ -287,7 +286,7 @@ void XIOTModule::addModuleEndpoints() {
     if (xiotPwd.length() > 0) {
       String xiotSsid = _server->arg("xiotSsid");
       if (xiotSsid.length() > 0) {
-        Debug("Saving Xiot SSID");
+        Debug("Saving Xiot SSID\n");
         _config->setXiotPwd(xiotPwd.c_str());
         _config->setXiotSsid(xiotSsid.c_str());
       }
@@ -769,19 +768,18 @@ void XIOTModule::_wifiDisplay() {
   WifiType wifiType = STA;
   bool blinkWifi = false;
 
-  if(_wifiConnected) {
-    strcpy(message, _config->getXiotSsid());
-    strcat(message, " ");
-    strcat(message, _localIP);
-  }
   if (_config->getIsAutonomous()) {
+    // Display IP on AP SSID 
     sprintf(message, "AP %s: %s", _config->getXiotSsid(), WiFi.softAPIP().toString().c_str());
   } else {
     sprintf(message, "Connecting to %s", _config->getXiotSsid());
   }
-
-
+  // If autonomous but connected to box, only keep box ssid / ip on display
+  if(_wifiConnected) {
+    sprintf(message, "%s", _localIP);
+  }
   _oledDisplay->setLine(0, message);
+
   
   if (!_wifiConnected) {
     blinkWifi = true;

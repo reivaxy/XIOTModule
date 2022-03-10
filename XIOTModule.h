@@ -155,13 +155,11 @@ public:
   bool _canRegister = false;
   bool _timeInitialized = false;  
   bool _refreshNeeded = false;  
-  char *_localIP = NULL;
+  char _localIP[IP_MAX_LENGTH + 1];
   bool _ntpEventToProcess = false;
   bool _ntpServerInitialized = false;
-  bool _ntpTimeInitialized = false;
   bool _ntpListenerInitialized = false;
 
   NTPSyncEvent_t _ntpEvent;
-
 
 };
