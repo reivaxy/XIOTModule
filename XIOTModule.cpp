@@ -2,6 +2,9 @@
 *  base class for all iotinator agents (and some day master too)
 *  Xavier Grosjean 2021
 *  Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License
+*
+*  Needs heavy refactoring, create classes for API, WifiSta, WifiAP, Time management... etc
+*
 */
 
 #include "XIOTModule.h"
@@ -86,10 +89,13 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
       if(_config->getIsAutonomous()) {       
         _ntpServerInitialized = true;
         Debug("Fetching time from %s\n", _config->getNtpServer());
-        NTP.begin(_config->getNtpServer(), _config->getGmtHourOffset(), true, _config->getGmtMinOffset());
-        NTP.setInterval(63, 7200);  // 63s retry, 2h refresh. Firt try usually fails, second usually works.
         // TODO: can this be improved so that we need not update the config twice a year?
-        // NTP.setTimeZone(_config->getGmtHourOffset(), _config->getGmtMinOffset());
+        int offset = _config->getGmtMinOffset(); // minutes
+        int hours = offset / 60;
+        int minutes = offset - (hours * 60);
+        NTP.begin(_config->getNtpServer(), hours, true, minutes);
+        NTP.setInterval(10, 7200);  // 10s retry, 2h refresh. Firt try usually fails, second usually works.
+        NTP.setTimeZone(hours, minutes);
 
       } else if(strcmp(DEFAULT_XIOT_APPWD, _config->getXiotPwd()) != 0) {
        // If non autonomous, module is connected to the customized SSID, and it can register itself to master
@@ -127,13 +133,16 @@ void XIOTModule::processNtpEvent() {
     else if (_ntpEvent == invalidAddress)
       Debug("Invalid NTP server address\n");
   } else {
-    Debug("Got NTP time: %s\n", NTP.getTimeDateString(NTP.getLastNTPSync()).c_str());
+    Debug("NTP time: %s\n", NTP.getTimeDateString(NTP.getLastNTPSync()).c_str());
     _ntpTimeInitialized = true;
     _timeDisplay();
     NTP.setInterval(7200, 7200);  // 5h retry, 2h refresh. once we have time, refresh failure is not critical
   }
 }
 
+bool XIOTModule::isTimeInitialized() {
+  return _ntpTimeInitialized;
+}
 void XIOTModule::addModuleEndpoints() {
   // list of headers we want to be able to read
   const char * headerkeys[] = {"Xiot-forward-to"} ;
@@ -254,19 +263,26 @@ void XIOTModule::addModuleEndpoints() {
 
   // Display config page.    
   _server->on("/config", HTTP_GET, [&]() {
-    char page[2000];
+    char *customForm = customFormInitPage();
+    char *customPage = customPageInitPage();
+    // Beware, update if some for values are added to the page.
+    char *page = (char*)malloc(strlen(moduleInitPage) + strlen(_config->getName())+ strlen("checked") + strlen(customForm) + strlen(customPage) + 50); 
     sprintf(page, moduleInitPage, _config->getName(),
                                   _config->getIsAutonomous()? "checked":"",
-                                  customFormInitPage(),
-                                  customPageInitPage());
+                                  _config->getGmtMinOffset(),
+                                  customForm,
+                                  customPage);
 
     sendHtml(page, 200);
+    free(page);
+    free(customForm);
+    free(customPage);
   });
 
   _server->on("/api/saveConfig", HTTP_POST, [&]() {
     int httpCode = 200;
 
-    // only save an ssid if its password is given
+    // only save a ssid if its password is given
     String xiotPwd = _server->arg("xiotPwd");
     if (xiotPwd.length() > 0) {
       String xiotSsid = _server->arg("xiotSsid");
@@ -280,11 +296,18 @@ void XIOTModule::addModuleEndpoints() {
     if (boxPwd.length() > 0) {
       String boxSsid = _server->arg("boxSsid");
       if (boxSsid.length() > 0) {
-        Debug("Saving Box SSID");
+        Debug("Saving Box SSID\n");
         _config->setBoxPwd(boxPwd.c_str());
         _config->setBoxSsid(boxSsid.c_str());
       }
     }
+    String timeOffset = _server->arg("timeOffset");
+    _config->setGmtOffset((int16_t)timeOffset.toInt());
+    int offset = _config->getGmtMinOffset(); // minutes
+    int hours = offset / 60;
+    int minutes = offset - (hours * 60);
+    NTP.setTimeZone(hours, minutes);
+
 
     customSaveConfig();
 
@@ -883,14 +906,20 @@ bool XIOTModule::customBeforeOTA() {
   return true;
 }
 
-const char* XIOTModule::customFormInitPage() {
+char* XIOTModule::customFormInitPage() {
   // Override this method to implement custom fields to be displayed in config form
-  return "";
+  // result needs to be freed by caller
+  char* result = (char*)malloc(1);
+  *result = 0;
+  return result;
 }
 
-const char* XIOTModule::customPageInitPage() {
+char* XIOTModule::customPageInitPage() {
   // Override this method to implement custom config page to be displayed in config page
-  return "";
+  // result needs to be freed by caller
+  char* result = (char*)malloc(1);
+  *result = 0;
+  return result;
 }
 
 int XIOTModule::customSaveConfig() {

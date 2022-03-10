@@ -94,8 +94,8 @@ public:
   virtual void customGotConfig(bool isSuccess);
   virtual bool customBeforeOTA();
   virtual void customOnStaGotIpHandler(WiFiEventStationModeGotIP ipInfo);
-  virtual const char* customFormInitPage();
-  virtual const char* customPageInitPage();
+  virtual char* customFormInitPage();
+  virtual char* customPageInitPage();
   virtual int customSaveConfig();
 
   virtual bool customProcessSMS(const char* phoneNumber, const bool isAdmin, const char* message);
@@ -139,6 +139,7 @@ public:
   const char* getSTASsid();
   const char* getSTAPwd();
   void processNtpEvent();
+  bool isTimeInitialized();
  
   ModuleConfigClass* _config;
   bool _otaIsStarted = false;

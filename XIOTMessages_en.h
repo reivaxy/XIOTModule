@@ -15,3 +15,4 @@
 #define MSG_INIT_WEBSITE "Web site URL"
 #define MSG_INIT_API_KEY "Api Key from Web site registration"
 #define MSG_INIT_AUTONOMOUS "Autonomous module"
+#define MSG_INIT_TIME_OFFSET "Time Offset in mn"

@@ -22,6 +22,7 @@ char moduleInitPage[] = "\
   <input name='xiotPwd' type='text' placeholder='" MSG_INIT_AP_PWD "'/><br/>\
   <input name='boxSsid' type='text' placeholder='" MSG_INIT_HOME_SSID "'/><br/>\
   <input name='boxPwd' type='text' placeholder='" MSG_INIT_HOME_PWD "'/><br/>\ 
+  <input name='timeOffset' type='number' value='%d' placeholder='" MSG_INIT_TIME_OFFSET "'/><br/>\ 
   <!--input name='ntpHost' type='text' placeholder='" MSG_INIT_NTP_HOST "'/><br/>\
   <input name='webSite' type='text' placeholder='" MSG_INIT_WEBSITE "'/><br/>\
   <input name='apiKey' type='text' placeholder='" MSG_INIT_API_KEY "'/><br/-->\
