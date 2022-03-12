@@ -74,10 +74,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   _wifiSTAGotIpHandler = WiFi.onStationModeGotIP([&](WiFiEventStationModeGotIP ipInfo) {
     strcpy(_localIP, ipInfo.ip.toString().c_str());
     if(isWaitingOTA()) {
-      char message[30];
-      sprintf(message, "OTA ready: %s", _localIP);
-      _oledDisplay->setLine(0, message, NOT_TRANSIENT, NOT_BLINKING);
-      ArduinoOTA.begin();    
+      waitForOta();
     } else {
       Serial.printf("Got IP on %s: %s\n", getSTASsid(), _localIP);
       _wifiConnected = true;
@@ -123,6 +120,13 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
 ESP8266WebServer* XIOTModule::getServer() {
   return _server;
 }
+
+  void XIOTModule::waitForOta() {
+    char message[30];
+    sprintf(message, "OTA ready: %s", _localIP);
+    _oledDisplay->setLine(0, message, NOT_TRANSIENT, NOT_BLINKING);
+    ArduinoOTA.begin();    
+  }
 
 void XIOTModule::processNtpEvent() {
   if (_ntpEvent) {
@@ -241,23 +245,31 @@ void XIOTModule::addModuleEndpoints() {
   
   // OTA: update. NB: for now, master has its own api endpoint 
   _server->on("/api/ota", HTTP_POST, [&]() {
-    String jsonBody = _server->arg("plain");
-    int httpCode = 200;
-    _oledDisplay->init(); 
-    _oledDisplay->setLineAlignment(2, TEXT_ALIGN_CENTER);
-  
-    const int bufferSize = JSON_OBJECT_SIZE(2) + 15 + SSID_MAX_LENGTH + PWD_MAX_LENGTH;
-    StaticJsonBuffer<bufferSize> jsonBuffer;   
-    JsonObject& root = jsonBuffer.parseObject(jsonBody); 
-    if (!root.success()) {
-      sendJson("{}", 500);
-      _oledDisplay->setLine(1, "Ota setup failed", TRANSIENT, NOT_BLINKING);
-      return;
+    int httpCode;
+    if (!_config->getIsAutonomous()) {
+
+      String jsonBody = _server->arg("plain");
+      int httpCode = 200;
+      _oledDisplay->init(); 
+      _oledDisplay->setLineAlignment(2, TEXT_ALIGN_CENTER);
+    
+      const int bufferSize = JSON_OBJECT_SIZE(2) + 15 + SSID_MAX_LENGTH + PWD_MAX_LENGTH;
+      StaticJsonBuffer<bufferSize> jsonBuffer;   
+      JsonObject& root = jsonBuffer.parseObject(jsonBody); 
+      if (!root.success()) {
+        sendJson("{}", 500);
+        _oledDisplay->setLine(1, "Ota setup failed", TRANSIENT, NOT_BLINKING);
+        return;
+      }
+      const char* ssidp = (const char*)root[XIOTModuleJsonTag::ssid];
+      const char* pwdp = (const char*)root[XIOTModuleJsonTag::pwd];
+      httpCode = startOTA(ssidp, pwdp);
+      sendJson("{}", httpCode); // send reply before disconnecting/reconnecting.     
+    } else {
+      httpCode = startOTA(NULL, NULL);
+      waitForOta();
+      sendHtml("Ready for OTA", httpCode);
     }
-    const char *ssidp = (const char*)root[XIOTModuleJsonTag::ssid];
-    const char *pwdp = (const char*)root[XIOTModuleJsonTag::pwd];
-    sendJson("{}", httpCode); // send reply before disconnecting/reconnecting.     
-    httpCode = startOTA(ssidp, pwdp);
   });
 
   // Display config page.    
@@ -719,19 +731,20 @@ void XIOTModule::_setupOTA() {
 
 int XIOTModule::startOTA(const char* ssid, const char* pwd) {
   bool enabled = customBeforeOTA();
-  Serial.printf("SSID : %s\n", ssid);
   if(!enabled) {
     _oledDisplay->setLine(1, "OTA mode refused", TRANSIENT, NOT_BLINKING);
     return 403;  
   }
   _otaReadyTime = millis();
   _setupOTA();
-  _oledDisplay->setLine(0, "Switching SSID for OTA", NOT_TRANSIENT, BLINKING);
-  _oledDisplay->setLine(1, "Waiting for OTA", NOT_TRANSIENT, BLINKING);
-  _oledDisplay->setLine(2, "", NOT_TRANSIENT, NOT_BLINKING);
+  
   if(ssid != NULL && strlen(ssid) > 0) {
+    Serial.printf("SSID : %s\n", ssid);
+    _oledDisplay->setLine(0, "Switching SSID for OTA", NOT_TRANSIENT, BLINKING);
+    _oledDisplay->setLine(1, "Waiting for OTA", NOT_TRANSIENT, BLINKING);
+    _oledDisplay->setLine(2, "", NOT_TRANSIENT, NOT_BLINKING);
     Serial.printf("Connecting to %s\n", ssid);
-    WiFi.begin(ssid, pwd);
+    WiFi.begin(ssid, pwd);    
   }
   return 200;
 }
@@ -776,7 +789,7 @@ void XIOTModule::_wifiDisplay() {
   }
   // If autonomous but connected to box, only keep box ssid / ip on display
   if(_wifiConnected) {
-    sprintf(message, "%s", _localIP);
+    sprintf(message, "%s (%s)", _localIP, getSTASsid());
   }
   _oledDisplay->setLine(0, message);
 

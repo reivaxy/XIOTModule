@@ -29,6 +29,7 @@ char moduleInitPage[] = "\
   %s\
   <input type='submit'/>\
 </form>\
+<br/><br/><br/><form action='/api/ota' method=POST><input type='submit' value='Upgrade Firmware'/></form>\
 %s\
 </body>\
 </html>\

@@ -129,7 +129,7 @@ public:
   bool isWaitingOTA();
   int startOTA(const char* ssid, const char*pwd);
   void _initSoftAP();
-
+  void waitForOta();
   void _connectSTA();  
   void _processPostPut();
   void _setupOTA();
