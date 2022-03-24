@@ -140,6 +140,8 @@ public:
   const char* getSTAPwd();
   void processNtpEvent();
   bool isTimeInitialized();
+  int sendToHttps(const char* url, const char* payload);
+  int sendPushNotif(const char* title, const char* message);
  
   ModuleConfigClass* _config;
   bool _otaIsStarted = false;
@@ -161,5 +163,4 @@ public:
   bool _ntpListenerInitialized = false;
 
   NTPSyncEvent_t _ntpEvent;
-
 };

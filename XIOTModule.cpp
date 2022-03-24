@@ -278,7 +278,7 @@ void XIOTModule::addModuleEndpoints() {
     char *customPage = customPageInitPage();
     // Beware, update if some for values are added to the page.
     char *page = (char*)malloc(strlen(moduleInitPage) + strlen(_config->getName())+ strlen("checked") + strlen(customForm) + strlen(customPage) + 50); 
-    sprintf(page, moduleInitPage, _config->getName(),
+    sprintf(page, moduleInitPage, _config->getName(), _config->getName(),
                                   _config->getIsAutonomous()? "checked":"",
                                   _config->getGmtMinOffset(),
                                   customForm,
@@ -292,6 +292,34 @@ void XIOTModule::addModuleEndpoints() {
 
   _server->on("/api/saveConfig", HTTP_POST, [&]() {
     int httpCode = 200;
+
+    // Should module be autonomous ?
+    String autonomous = _server->arg("autonomous");
+    if(strcmp(autonomous.c_str(), "on") == 0) {
+      _config->setIsAutonomous(true);
+    } else {
+      _config->setIsAutonomous(false);
+    }
+
+    // only save module name if not empty
+    String name = _server->arg("name");
+    if (name.length() > 0) {
+      Debug("Saving name\n");
+      _config->setName(name.c_str());
+    }
+
+    // only save pushover user token if not empty
+    String poUser = _server->arg("poUser");
+    if (poUser.length() > 0) {
+      Debug("Saving poUser\n");
+      _config->setPushoverUser(poUser.c_str());
+    }
+    // only save pushover app token if not empty
+    String poToken = _server->arg("poToken");
+    if (poToken.length() > 0) {
+      Debug("Saving poToken\n");
+      _config->setPushoverToken(poToken.c_str());
+    }
 
     // only save a ssid if its password is given
     String xiotPwd = _server->arg("xiotPwd");
@@ -400,6 +428,50 @@ void XIOTModule::_processSMS() {
   } 
 
 }    
+
+int XIOTModule::sendPushNotif(const char* title, const char* message) {
+  char body[500];
+  Debug("XIOTModule::sendPushNotif");
+  // only 4 fields in the request to pushOver Api
+  const int bufferSize = JSON_OBJECT_SIZE(4);
+  StaticJsonBuffer<bufferSize> jsonBuffer; 
+  JsonObject& root = jsonBuffer.createObject();
+  const char *userToken = _config->getPushoverUser();
+  if (strlen(userToken) < 30) {
+    return -2;
+  }
+  root["user"] = userToken;
+  root["token"] = _config->getPushoverToken();
+  root["title"] = title;
+  root["message"] = message;
+  root.printTo(body);
+  Debug("body : %s\n", body);
+  return sendToHttps("https://api.pushover.net/1/messages.json", body);
+}
+
+int XIOTModule::sendToHttps(const char* url, const char* payload) {
+  int httpCode = -1;
+  std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
+  client->setInsecure();
+  HTTPClient https;
+  if (https.begin(*client, url)) {
+    // start connection and send  headers
+    https.addHeader("Content-Type", "application/json");
+    httpCode = https.POST((const uint8_t *)payload, strlen(payload));
+    Debug("HTTP response code: %d\n", httpCode);
+    if (httpCode > 200) {
+      Debug(https.getString().c_str());
+    }
+    if (httpCode < 0) {
+      Debug(https.errorToString(httpCode).c_str());
+    }
+
+    https.end();
+  } else {
+    Debug("Connection failed");
+  }
+  return httpCode;
+}
 
 
 /**
@@ -701,9 +773,11 @@ void XIOTModule::_setupOTA() {
     _oledDisplay->setLine(1, "Loading...", NOT_TRANSIENT, BLINKING);
     _oledDisplay->setLine(2, "Start updating", TRANSIENT, NOT_BLINKING);
   });  
+
   ArduinoOTA.onEnd([&]() {
     _oledDisplay->setLine(2, "End updating", TRANSIENT, NOT_BLINKING);
   });  
+  
   ArduinoOTA.onProgress([&](unsigned int progress, unsigned int total) {
     char message[50];
     if(progress == total) {
