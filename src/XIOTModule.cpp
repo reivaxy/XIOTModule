@@ -48,6 +48,7 @@ XIOTModule::XIOTModule(DisplayClass *display, bool flipScreen, uint8_t brightnes
 XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySda, int displayScl, bool flipScreen, uint8_t brightness) {
   WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
   _config = config;
+  firebase = new Firebase(config);
   Serial.print("Initializing module ");
   Serial.println(config->getName());
 
@@ -76,7 +77,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
     if(isWaitingOTA()) {
       waitForOta();
     } else {
-      Serial.printf("Got IP on %s: %s\n", getSTASsid(), _localIP);
+      Serial.printf("Got IP on %s: %s\n",_config->getSTASsid(), _localIP);
       _wifiConnected = true;
       _canQueryMasterConfig = true;
       _wifiDisplay();
@@ -129,6 +130,7 @@ ESP8266WebServer* XIOTModule::getServer() {
   }
 
 void XIOTModule::processNtpEvent() {
+  Debug("XIOTModule::processNtpEvent\n");
   if (_ntpEvent) {
     Debug("NTP Time Sync error: ");
     if (_ntpEvent == noResponse)
@@ -139,7 +141,8 @@ void XIOTModule::processNtpEvent() {
     Debug("NTP time: %s\n", NTP.getTimeDateString(NTP.getLastNTPSync()).c_str());
     _timeInitialized = true;
     _timeDisplay();
-    NTP.setInterval(7200, 7200);  // 5h retry, 2h refresh. once we have time, refresh failure is not critical
+    NTP.setInterval(7200, 7200);  // 2h retry, 2h refresh. once we have time, refresh failure is not critical
+    firebase->init();
   }
 }
 
@@ -280,6 +283,7 @@ void XIOTModule::addModuleEndpoints() {
     char *page = (char*)malloc(strlen(moduleInitPage) + strlen(_config->getName())+ strlen("checked") + strlen(customForm) + strlen(customPage) + 50); 
     sprintf(page, moduleInitPage, _config->getName(), _config->getName(),
                                   _config->getIsAutonomous()? "checked":"",
+                                  _config->getSendPing()? "checked":"",
                                   _config->getGmtMinOffset(),
                                   customForm,
                                   customPage);
@@ -300,6 +304,13 @@ void XIOTModule::addModuleEndpoints() {
     } else {
       _config->setIsAutonomous(false);
     }
+    // Should module send pings ?
+    String ping = _server->arg("ping");
+    if(strcmp(ping.c_str(), "on") == 0) {
+      _config->setSendPing(true);
+    } else {
+      _config->setSendPing(false);
+    }
 
     // only save module name if not empty
     String name = _server->arg("name");
@@ -319,6 +330,16 @@ void XIOTModule::addModuleEndpoints() {
     if (poToken.length() > 0) {
       Debug("Saving poToken\n");
       _config->setPushoverToken(poToken.c_str());
+    }
+
+    // only save firebase url if not empty
+    String firebaseUrl = _server->arg("firebaseUrl");
+    if (firebaseUrl.length() > 0) {
+      Debug("Saving firebaseUrl\n");
+      if (firebaseUrl.endsWith("/")) {
+        firebaseUrl.remove(firebaseUrl.length() - 1);
+      }
+      _config->setFirebaseUrl(firebaseUrl.c_str());
     }
 
     // only save a ssid if its password is given
@@ -431,15 +452,20 @@ void XIOTModule::_processSMS() {
 
 int XIOTModule::sendPushNotif(const char* title, const char* message) {
   char body[500];
-  Debug("XIOTModule::sendPushNotif");
+  Debug("XIOTModule::sendPushNotif\n");
+  if (!_wifiConnected) {
+    return -1;
+  }  
+  // To disable push notif sending, set a short string instead of user token
+  const char *userToken = _config->getPushoverUser();
+  if (strlen(userToken) < 30) {
+    return -2;
+  } 
   // only 4 fields in the request to pushOver Api
   const int bufferSize = JSON_OBJECT_SIZE(4);
   StaticJsonBuffer<bufferSize> jsonBuffer; 
   JsonObject& root = jsonBuffer.createObject();
-  const char *userToken = _config->getPushoverUser();
-  if (strlen(userToken) < 30) {
-    return -2;
-  }
+
   root["user"] = userToken;
   root["token"] = _config->getPushoverToken();
   root["title"] = title;
@@ -483,33 +509,14 @@ void XIOTModule::_connectSTA() {
   _canQueryMasterConfig = false;
   _canRegister = false;
   _wifiConnected = false;
-  const char* ssid = getSTASsid();
+  firebase->reset();
+  const char* ssid =_config->getSTASsid();
   if(*ssid != 0) {
     Debug("XIOTModule::_connectSTA: %s\n", ssid);
-    WiFi.begin(getSTASsid(), getSTAPwd());
+    WiFi.begin(_config->getSTASsid(), _config->getSTAPwd());
     _wifiDisplay();
   } else {
     Debug("XIOTModule::_connectSTA: no ssid\n");
-  }
-}
-
-// Autonomous modules connect to the internet home box
-// Non Autonomous modules connect to the master exposed SSID
-const char* XIOTModule::getSTASsid() {
-  if (_config->getIsAutonomous()) {
-    return _config->getBoxSsid();
-  } else {
-    return _config->getXiotSsid();
-  }
-}
-
-// Autonomous modules connect to the internet home box
-// Non Autonomous modules connect to the master exposed SSID
-const char* XIOTModule::getSTAPwd() {
-  if (_config->getIsAutonomous()) {
-    return _config->getBoxPwd();
-  } else {
-    return _config->getXiotPwd();
   }
 }
 
@@ -863,7 +870,7 @@ void XIOTModule::_wifiDisplay() {
   }
   // If autonomous but connected to box, only keep box ssid / ip on display
   if(_wifiConnected) {
-    sprintf(message, "%s (%s)", _localIP, getSTASsid());
+    sprintf(message, "%s (%s)", _localIP,_config->getSTASsid());
   }
   _oledDisplay->setLine(0, message);
 
@@ -897,6 +904,7 @@ void XIOTModule::sendText(const char* msg, int code) {
 void XIOTModule::loop() {
   now(); // Needed to update the clock from the TimeLib library
   // (and used by NTP library)
+  unsigned long timeNow = millis();
       
   // Check if any request to serve
   _server->handleClient();
@@ -924,7 +932,6 @@ void XIOTModule::loop() {
     return;
   }
   
-  unsigned int timeNow = millis();
   // Should we get the config from master ?
   if(!_config->getIsAutonomous()) {
     if(_wifiConnected && _canQueryMasterConfig && (timeNow - _timeLastGetConfig >= 5000)) {
@@ -936,15 +943,11 @@ void XIOTModule::loop() {
     if(_wifiConnected && _canRegister && (timeNow - _timeLastRegister >= 5000)) {
       _timeLastRegister = timeNow;
       _register(); 
-    _register(); 
-      _register(); 
       _oledDisplay->refresh();
       delay(300); // Otherwise message can't be read !
     } 
   } 
    
-  
-  
   // Time on display should be refreshed every second
   // Intentionnally not using the value returned by now(), since it changes
   // when time is set.
@@ -959,11 +962,24 @@ void XIOTModule::loop() {
       _refreshNeeded = false;
     }
   }
+
+  firebase->loop();
   
   customLoop();
   
   // Display needs to be refreshed continuously (for blinking, ...)
   _oledDisplay->refresh();    
+}
+
+char* XIOTModule::getDateStr(char* dateBuffer) {
+  int h = hour();
+  int mi = minute();
+  int s = second();
+  int d = day();
+  int mo = month();
+  int y= year();
+  sprintf(dateBuffer, "%04d/%02d/%02dT%02d:%02d:%02d", y, mo, d, h, mi, s);
+  return dateBuffer;
 }
 
 void XIOTModule::hideDateTime(bool flag) {

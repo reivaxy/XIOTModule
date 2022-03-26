@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "XIOTModuleDebug.h"
 #include <XIOTConfig.h>
 #include <XIOTDisplay.h>
 #include <ESP8266WiFi.h>
@@ -18,19 +19,12 @@
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <NtpClientLib.h>
+#include "Firebase.h"
 
 
 extern "C" {
   #include "user_interface.h"  // Allow getting heap size
 }
-
-#define DEBUG_XIOTMODULE // Uncomment this to enable debug messages over serial port
-
-#ifdef DEBUG_XIOTMODULE
-#define Debug(...) Serial.printf(__VA_ARGS__)
-#else
-#define Debug(...)
-#endif
 
 // Max length authorized for modules custom data
 #define MAX_GLOBAL_STATUS_SIZE 30
@@ -52,7 +46,6 @@ extern "C" {
 
 #define JSON_BUFFER_REGISTER_SIZE JSON_OBJECT_SIZE(20)
 #define JSON_STRING_REGISTER_SIZE 1000 + MAX_CUSTOM_DATA_SIZE
-
 
 class XIOTModuleJsonTag {
 public:
@@ -124,7 +117,6 @@ public:
   void sendHtml(const char* msg, int code);
   void sendJson(const char* msg, int code);
   void hideDateTime(bool);
-  bool _hideDateTime = false;
   void addModuleEndpoints();
   bool isWaitingOTA();
   int startOTA(const char* ssid, const char*pwd);
@@ -136,13 +128,17 @@ public:
   char* _buildFullPayload();
   void _initDisplay(int displayAddr, int displaySda, int displayScl, bool flipScreen = true, uint8_t brightness = 100);
   void _processSMS();
-  const char* getSTASsid();
-  const char* getSTAPwd();
+
   void processNtpEvent();
   bool isTimeInitialized();
   int sendToHttps(const char* url, const char* payload);
   int sendPushNotif(const char* title, const char* message);
- 
+  char *getDateStr(char *dateBuffer);
+
+
+  Firebase* firebase = NULL;
+
+  bool _hideDateTime = false;
   ModuleConfigClass* _config;
   bool _otaIsStarted = false;
   time_t _otaReadyTime = 0;
@@ -150,8 +146,9 @@ public:
   ESP8266WebServer* _server;
   WiFiEventHandler _wifiSTAGotIpHandler, _wifiSTADisconnectedHandler;
   unsigned int _timeLastTimeDisplay = 0;
-  unsigned int _timeLastRegister = 0;
-  unsigned int _timeLastGetConfig = 0;
+  unsigned long _timeLastRegister = 0;
+  unsigned long _timeLastGetConfig = 0;
+  unsigned long lastSendPing = 0;
   bool _wifiConnected = false;
   bool _canQueryMasterConfig = false;
   bool _canRegister = false;
@@ -161,6 +158,7 @@ public:
   bool _ntpEventToProcess = false;
   bool _ntpServerInitialized = false;
   bool _ntpListenerInitialized = false;
+  
 
   NTPSyncEvent_t _ntpEvent;
 };

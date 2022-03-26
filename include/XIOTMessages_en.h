@@ -16,6 +16,11 @@
 #define MSG_INIT_WEBSITE "Web site URL"
 #define MSG_INIT_API_KEY "Api Key from Web site registration"
 #define MSG_INIT_AUTONOMOUS "Autonomous module"
+#define MSG_INIT_SEND_PING "Send pings"
 #define MSG_INIT_TIME_OFFSET "Time Offset in mn"
 #define MSG_INIT_PO_USER "PushOver user token"
 #define MSG_INIT_PO_TOKEN "PushOver app token"
+#define MSG_INFO_PO_TOKEN "(set 'none' for no notif)"
+#define MSG_INIT_FIREBASE_URL "Firebase URL"
+#define MSG_INIT_CONFIRM "Confirmez Upgrade Firmware ?"
+
