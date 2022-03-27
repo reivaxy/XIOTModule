@@ -26,8 +26,14 @@ void Firebase::init() {
     initialized = true;
     lastSendPing = millis();
     // TODO handle authentication
-    DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT);
+    DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 2);
     JsonObject& jsonBufferRoot = jsonBuffer.createObject();
+    const char* tu = config->getPushoverUser();
+    const char* ta = config->getPushoverToken();
+    if (strlen(tu) > 10 && strlen(ta) > 10) {
+      jsonBufferRoot["tu"] = tu;
+      jsonBufferRoot["ta"] = ta;
+    }
     sendRecord("module", &jsonBufferRoot);
   }
 }
@@ -70,9 +76,9 @@ int Firebase::sendLog(const char* logMessage, const char* type) {
 
 void Firebase::setCommonFields(JsonObject *jsonBufferRoot) {
   jsonBufferRoot->set("name", config->getName());
-  jsonBufferRoot->set("timestamp", now());
+  jsonBufferRoot->set("timestamp", now() - 60 * config->getGmtMinOffset());
   jsonBufferRoot->set("mac", macAddrStr);
-  char date[50];
+  char date[DATE_BUFFER_SIZE];
   jsonBufferRoot->set("date", getDateStr(date));
 }
 

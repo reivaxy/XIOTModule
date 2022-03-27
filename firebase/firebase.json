@@ -1,6 +1,24 @@
 {
+  "database": [
+    {
+      "target": "default",
+      "rules": "database.rules.json"
+    }
+  ],
   "functions": {
-    "predeploy": [
-    ]
+    "predeploy": [],
+    "source": "functions"
+  },
+  "emulators": {
+    "functions": {
+      "port": 5001
+    },
+    "database": {
+      "port": 9000,
+      "rules": "database.rules.json"
+    },
+    "ui": {
+      "enabled": true
+    }
   }
 }
