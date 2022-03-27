@@ -7,7 +7,7 @@
 #include <XIOTConfig.h>
 #include "Firebase.h"
 
-#define COMMON_FIELD_COUNT 4
+#define COMMON_FIELD_COUNT 3
 #define PING_PERIOD 1000 * 60 * 5UL // 5mn
 #define DATE_BUFFER_SIZE 25
 
@@ -22,15 +22,17 @@ void Firebase::init() {
   uint8_t macAddr[6];
   WiFi.macAddress(macAddr);
   sprintf(macAddrStr, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]);
+  lastSendPing = 0;
   if (strlen(config->getFirebaseUrl()) > 10) {
     initialized = true;
-    lastSendPing = millis();
     // TODO handle authentication
     DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 2);
     JsonObject& jsonBufferRoot = jsonBuffer.createObject();
     const char* tu = config->getPushoverUser();
     const char* ta = config->getPushoverToken();
-    if (strlen(tu) > 10 && strlen(ta) > 10) {
+    // Tokens need to be provided, and ping activated. 
+    // If ping is not activated, providing tokens will trigger notifications on Firebase, we don't want that
+    if (config->getSendFirebasePing() && strlen(tu) > 10 && strlen(ta) > 10) {
       jsonBufferRoot["tu"] = tu;
       jsonBufferRoot["ta"] = ta;
     }
@@ -46,16 +48,13 @@ void Firebase::reset() {
 void Firebase::loop() {
   if (!initialized) {
     return ;
-
   }
-  unsigned long timeNow = millis();
-  if (config->getSendPing() && XUtils::isElapsedDelay(timeNow, &lastSendPing, PING_PERIOD)) {
-    if(initialized) {
-      DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT);
-      JsonObject& jsonBufferRoot = jsonBuffer.createObject();
-      sendEvent("ping", &jsonBufferRoot);
 
-    }
+  unsigned long timeNow = now() * 1000; // don't use millis, it's 0 when starting :)
+  if (config->getSendFirebasePing() && XUtils::isElapsedDelay(timeNow, &lastSendPing, PING_PERIOD)) {
+    DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT);
+    JsonObject& jsonBufferRoot = jsonBuffer.createObject();
+    sendEvent("ping", &jsonBufferRoot);
   }
 }
 
@@ -76,7 +75,6 @@ int Firebase::sendLog(const char* logMessage, const char* type) {
 
 void Firebase::setCommonFields(JsonObject *jsonBufferRoot) {
   jsonBufferRoot->set("name", config->getName());
-  jsonBufferRoot->set("timestamp", now() - 60 * config->getGmtMinOffset());
   jsonBufferRoot->set("mac", macAddrStr);
   char date[DATE_BUFFER_SIZE];
   jsonBufferRoot->set("date", getDateStr(date));
@@ -94,6 +92,7 @@ int Firebase::sendRecord(const char* type, JsonObject* jsonBufferRoot) {
 }
 
 int Firebase::sendEvent(const char* type, JsonObject* jsonBufferRoot) {
+  Debug("Firebase::sendEvent\n");
   if (!initialized) {
     return -1;
   }
@@ -120,7 +119,6 @@ int Firebase::sendToHttps(const char* method, const char* url, JsonObject* jsonB
   char *buff = (char*)malloc(size);
   jsonBufferRoot->printTo(buff, size);
   int result = sendToHttps(method, url, buff);
-  Debug("%s\n", buff);
   free(buff);
   return result;
 }

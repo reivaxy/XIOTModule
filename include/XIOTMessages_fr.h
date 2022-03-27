@@ -16,7 +16,7 @@
 #define MSG_INIT_WEBSITE "URL du site web"
 #define MSG_INIT_API_KEY "API key pour le site web"
 #define MSG_INIT_AUTONOMOUS "Module autonome"
-#define MSG_INIT_SEND_PING "Envoyer des pings"
+#define MSG_INIT_NOTIF_OFFLINE "Notification si offline"
 #define MSG_INIT_TIME_OFFSET "Decalage horaire en mn"
 #define MSG_INIT_PO_USER "Token utilisateur de PushOver"
 #define MSG_INIT_PO_TOKEN "Token App de PushOver"

@@ -24,15 +24,15 @@ a{right:40px;position:absolute;text-decoration:none}\
 <form action='/api/saveConfig' method='post'>\
   " MSG_INIT_NAME " <br/><input name='name' type='text' value='%s' maxlength=20/></br>\
   " MSG_INIT_AUTONOMOUS "<input name='autonomous' type='checkbox' %s/></br>\
-  " MSG_INIT_SEND_PING "<input name='ping' type='checkbox' %s/></br>\
   " MSG_INIT_AP_SSID " <br/><input name='xiotSsid' type='text' maxlength=20/><br/>\
   " MSG_INIT_AP_PWD " <br/><input name='xiotPwd' type='text' maxlength=50/><br/>\
   " MSG_INIT_HOME_SSID " <br/><input name='boxSsid' type='text' maxlength=20/><br/>\
   " MSG_INIT_HOME_PWD " <br/><input name='boxPwd' type='text' maxlength=50><br/>\ 
   " MSG_INIT_TIME_OFFSET " <br/><input name='timeOffset' type='number' value='%d'><br/>\ 
+  " MSG_INIT_FIREBASE_URL " <br/><input name='firebaseUrl' type='text' maxlength=150/><br/>\
   " MSG_INIT_PO_USER "<br/>" MSG_INFO_PO_TOKEN " <br/><input name='poUser' type='text' maxlength=40/><br/>\
   " MSG_INIT_PO_TOKEN " <br/><input name='poToken' type='text' maxlength=40/><br/>\
-  " MSG_INIT_FIREBASE_URL " <br/><input name='firebaseUrl' type='text' maxlength=150/><br/>\
+  " MSG_INIT_NOTIF_OFFLINE "<input name='ping' type='checkbox' %s/></br>\
   <!--" MSG_INIT_NTP_HOST " <br/><input name='ntpHost' type='text'/><br/>\
   " MSG_INIT_WEBSITE " <br/><input name='webSite' type='text'/><br/>\
   " MSG_INIT_API_KEY " <br/><input name='apiKey' type='text'/><br/-->\

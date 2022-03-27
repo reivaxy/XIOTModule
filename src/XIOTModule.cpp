@@ -283,8 +283,8 @@ void XIOTModule::addModuleEndpoints() {
     char *page = (char*)malloc(strlen(moduleInitPage) + strlen(_config->getName())+ strlen("checked") + strlen(customForm) + strlen(customPage) + 50); 
     sprintf(page, moduleInitPage, _config->getName(), _config->getName(),
                                   _config->getIsAutonomous()? "checked":"",
-                                  _config->getSendPing()? "checked":"",
                                   _config->getGmtMinOffset(),
+                                  _config->getSendFirebasePing()? "checked":"",
                                   customForm,
                                   customPage);
 
@@ -307,9 +307,9 @@ void XIOTModule::addModuleEndpoints() {
     // Should module send pings ?
     String ping = _server->arg("ping");
     if(strcmp(ping.c_str(), "on") == 0) {
-      _config->setSendPing(true);
+      _config->setSendFirebasePing(true);
     } else {
-      _config->setSendPing(false);
+      _config->setSendFirebasePing(false);
     }
 
     // only save module name if not empty
