@@ -14,6 +14,8 @@
 #include <ESP8266HTTPClient.h>
 
 #include <ArduinoJson.h>
+#include <XIOTConfig.h>
+#include "XIOTMessages.h"
 
 // TODO handle authent
 class Firebase {

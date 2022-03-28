@@ -4,7 +4,6 @@
  *  Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License
  */
 
-#include <XIOTConfig.h>
 #include "Firebase.h"
 
 #define COMMON_FIELD_COUNT 3
@@ -36,6 +35,7 @@ void Firebase::init() {
       jsonBufferRoot["tu"] = tu;
       jsonBufferRoot["ta"] = ta;
     }
+    jsonBufferRoot["lang"] = XIOT_LANG;
     sendRecord("module", &jsonBufferRoot);
   }
 }
@@ -70,6 +70,7 @@ int Firebase::sendLog(const char* logMessage, const char* type) {
   DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 1);
   JsonObject& jsonBufferRoot = jsonBuffer.createObject();
   jsonBufferRoot["message"] = logMessage;
+  jsonBufferRoot["lang"] = XIOT_LANG;
   return sendEvent(type, &jsonBufferRoot);
 }
 

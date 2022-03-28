@@ -23,55 +23,101 @@ const needle = require('needle');
 // Timestamp field inserted when an object is created
 const GCP_TIMESTAMP_NAME = "gcp_timestamp";
 
-// Get rid of pings after 31 days
-const PING_MAX_AGE_S = 2 * 3600; // testing with 2 hours for now. 31 * 24 * 3600;  // 31 days in seconds
+// Get rid of pings and logs older than 31 days
+const PING_MAX_AGE_D = 31; // keeping 31 days of logs and pings
+const PING_MAX_AGE_S = PING_MAX_AGE_D * 24 * 3600;  // to ease debugging phase
+
 const COMPOSITE_KEY_NAME = "lookupKey";
 
-exports.deleteOldItems = functions.region('europe-west1').pubsub.schedule('every 2 hours').onRun( (context) => {
-     functions.logger.log('deleteOldItems every 24 hours');
+const MSG_MODULE_OFFLINE = "Module is no longer online";
 
-     const cutoff = Math.ceil(Date.now() / 1000) - PING_MAX_AGE_S;
-     functions.logger.log("Cutoff : " + cutoff)
-     const pings = admin.database().ref('ping').orderByChild(GCP_TIMESTAMP_NAME).endAt(cutoff).limitToFirst(2000);
+exports.deleteOldItems = functions.region('europe-west1').pubsub.schedule(`every ${PING_MAX_AGE_D} days`).onRun( (context) => {
+     deleteOld("ping");
+     deleteOld("log");    
+//     deleteOld("alert");     // May be keep longer ?
+     return null;
+});
+
+function deleteOld(type) {
+     functions.logger.log(`Deleting ${type}s older than ${PING_MAX_AGE_D} days`);
+     const cutoff = Math.ceil(Date.now() / 1000) - PING_MAX_AGE_S ;
+     const items = admin.database().ref(type).orderByChild(GCP_TIMESTAMP_NAME).endAt(cutoff).limitToFirst(2000);
      // create a map with all children that need to be removed
      const updates = {};
-     pings.once("value", function(pings) {
-          pings.forEach(ping => {
-               functions.logger.log(ping.key);
-               updates[ping.key] = null;
+     var count = 0;
+     items.once("value", function(pings) {
+          pings.forEach(item => {
+               updates[item.key] = null;
+               count ++;
           });
-          // remove them all
-          var delOld = admin.database().ref('ping');
-          delOld.update(updates, a => {
-               functions.logger.log(a);         
-          });
+          functions.logger.log(`Deleting ${count} items of type '${type}`);
+          if (count > 0) {
+               // remove them all
+               var delOld = admin.database().ref(type);
+               delOld.update(updates, a => {
+                    if(a != null) {
+                         functions.logger.log(`Deletion error for ${type}: ${a}`);         
+                    }
+               });
+          }
      });
+}
 
-    return null;
-});
+function translate(message, toLang) {
+     switch(toLang) {
+          case "fr":
+               switch(message) {
+                    case MSG_MODULE_OFFLINE:
+                         return "Le module n'est plus connecté";
+                         break;
+               }
+          break;
+          case "en":
+          default:
+          break;
+     }
+     return message;
+}
 
 exports.checkPing = functions.region('europe-west1').pubsub.schedule('every 5 minutes').onRun((context) => {
      functions.logger.log('CheckPing function triggered every 5 minutes');
      const now = Math.ceil(Date.now() / 1000);
-     const lastHour = now - 3900;  // Actually one hour and 5 mn which is the ping periodicity (to avoid edge issue)
+     // Pings are sent every 5mn so we check that there is at least one in the last 5mn and 5s (to avoid interval edge issue)
+     // (there could be more than one if module is restarted for instance)
+     // Idea: save the ping period in the module record, to react faster for module who need it (but also needs triggering this function more frequently...)
+     const last6mn = now - 305;
      const modules = admin.database().ref('module');
      modules.once('value', function (modules) {
           modules.forEach(function (module) {
-               const mac = module.child("mac").val();
                const tu = module.child("tu").val();
                const ta = module.child("ta").val();
+               const lang = module.child("lang").val() || "en";
+               const mac = module.child("mac").val();
                const moduleName = module.child("name").val();
-               functions.logger.log('Checking pings on module ' + mac);
+
+               functions.logger.log(`Checking pings on module '${moduleName}'`);    
                const moduleLastHourPings = admin.database().ref('ping')
-                    .orderByChild(COMPOSITE_KEY_NAME).startAt(compositeKeyValue(mac, lastHour))
+                    .orderByChild(COMPOSITE_KEY_NAME).startAt(compositeKeyValue(mac, last6mn))
                     .endAt(compositeKeyValue(mac, now));
 
                moduleLastHourPings.once('value', function (pings) {
                     const size = pings.numChildren();
-                    functions.logger.log("Size: " + size);
-                    if (size < 12) {
-                         functions.logger.log("ALERT MODULE " + moduleName + " STOPPED !");
-                         sendNotification(tu, ta, "Alert " + moduleName, "Module no longer online");
+                    functions.logger.log(`Ping count in last 6mn for module '${moduleName}' : ${size}`);
+                    if (size == 0) {
+                         functions.logger.log(`ALERT MODULE '${moduleName}' STOPPED !`);
+                         var msg = translate(MSG_MODULE_OFFLINE, lang);
+                         sendNotification(tu, ta, `${moduleName}`,msg);
+                         // Create an alert object in DB
+                         var alertsRef = admin.database().ref("alert");
+                         var newAlertRef = alertsRef.push();
+                         newAlertRef.set({
+                              "mac": mac,
+                              "lang": lang,
+                              "message": msg,
+                              "date": getFormattedDate(),
+                              "name": moduleName
+                         });
+
                     }
                });
           });
@@ -80,15 +126,29 @@ exports.checkPing = functions.region('europe-west1').pubsub.schedule('every 5 mi
 
 });
 
-// add a true timestamp because the one generated by the module is crappy (need to fix)
+function getFormattedDate() {
+     var now = new Date();
+     var month = addZero(now.getUTCMonth());
+     var day = addZero(now.getUTCDate());
+     var hour = addZero(now.getUTCHours());
+     var min = addZero(now.getUTCMinutes());
+     var sec = addZero(now.getUTCSeconds());
+     var dateStr = `${now.getUTCFullYear()}/${month}/${day}T${hour}:${min}:${sec}Z`;  // This is a UTC date
+     return dateStr;
+}
+
+function addZero(value) {
+     return value < 10? "0" + value : value;
+}
+
+// add timestamp, module no longer adds it
 exports.setTimestampOnCreate = functions.region('europe-west1').database.ref('/{type}/{objectId}').onCreate((snapshot, context) => {
      functions.logger.log('setTimestampOnCreate');
      const timestamp = Math.ceil(Date.now() / 1000);
      // To be able to fetch pings by module AND with a start/end criteria, add a composite field for that
      if (context.params.type == "ping") {
-          functions.logger.log('ping object created');
           const mac = snapshot.child("mac").val();
-          functions.logger.log('mac ' + mac);
+          functions.logger.log(`Ping object created for module ${mac}`);          
           snapshot.ref.child(COMPOSITE_KEY_NAME).set(compositeKeyValue(mac, timestamp));
      }
      return snapshot.ref.child(GCP_TIMESTAMP_NAME).set(timestamp);
@@ -140,9 +200,8 @@ function sendNotification(tu, ta, title, message) {
           needle('post', 'https://api.pushover.net/1/messages.json', data, { json: true })
                .then((res) => {
                     functions.logger.log(`Status: ${res.statusCode}`);
-                    functions.logger.log('Body: ', res.body);
                }).catch((err) => {
-                    functions.logger.error(err);
+                    functions.logger.error(`Error: ${err}`);
                });
      }
 }

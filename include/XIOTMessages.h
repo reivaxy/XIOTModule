@@ -9,6 +9,8 @@
 
 #if XIOT_LANGUAGE == fr
 #include "XIOTMessages_fr.h"
+#define XIOT_LANG "fr"
 #else
 #include "XIOTMessages_en.h"
+#define XIOT_LANG "en"
 #endif
