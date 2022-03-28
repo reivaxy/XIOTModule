@@ -41,26 +41,8 @@ exports.deleteOldItems = functions.region('europe-west1').pubsub.schedule("every
 function deleteOld(type) {
      functions.logger.log(`Deleting ${type}s older than ${PING_MAX_AGE_D} days`);
      const cutoff = Math.ceil(Date.now() / 1000) - PING_MAX_AGE_S ;
-     const items = admin.database().ref(type).orderByChild(GCP_TIMESTAMP_NAME).endAt(cutoff).limitToFirst(2000);
-     // create a map with all children that need to be removed
-     const updates = {};
-     var count = 0;
-     items.once("value", function(pings) {
-          pings.forEach(item => {
-               updates[item.key] = null;
-               count ++;
-          });
-          functions.logger.log(`Deleting ${count} items of type '${type}`);
-          if (count > 0) {
-               // remove them all
-               var delOld = admin.database().ref(type);
-               delOld.update(updates, a => {
-                    if(a != null) {
-                         functions.logger.log(`Deletion error for ${type}: ${a}`);         
-                    }
-               });
-          }
-     });
+     const itemsRef = admin.database().ref(type).orderByChild(GCP_TIMESTAMP_NAME).endAt(cutoff).limitToFirst(2000);
+     deleteDocuments(itemsRef, type);
 }
 
 function translate(message, toLang) {
@@ -139,6 +121,43 @@ function getFormattedDate() {
 
 function addZero(value) {
      return value < 10? "0" + value : value;
+}
+
+// Cleanup related logs, pings and alerts when a module is deleted
+exports.cleanupOnModuleDeletion = functions.region('europe-west1').database.ref('/module/{moduleMac}').onDelete((snapshot, context) => {
+     var mac = context.params.moduleMac;
+     functions.logger.log(`cleanupOnModuleDeletion for module ${mac}`);
+     cleanupModuleRelatedDocuments(mac, "ping");
+     cleanupModuleRelatedDocuments(mac, "log");
+     cleanupModuleRelatedDocuments(mac, "alert");
+     return null;
+});
+
+function cleanupModuleRelatedDocuments(mac, type) {
+     const itemsRef = admin.database().ref(type).orderByChild("mac").equalTo(mac);
+     deleteDocuments(itemsRef, type);
+}
+
+function deleteDocuments(itemsRef, type) {
+     // create a map with all children that need to be removed
+     const updates = {};
+     var count = 0;
+     itemsRef.once("value", function(items) {
+          items.forEach(item => {
+               updates[item.key] = null;
+               count ++;
+          });
+          functions.logger.log(`Deleting ${count} items of type '${type}`);
+          if (count > 0) {
+               // remove them all
+               var delOld = admin.database().ref(type);
+               delOld.update(updates, a => {
+                    if (a != null) {
+                         functions.logger.log(`Deletion error for ${type}: ${a}`);         
+                    }
+               });
+          }
+     });
 }
 
 // add timestamp, module no longer adds it
