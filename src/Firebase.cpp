@@ -36,7 +36,7 @@ void Firebase::init() {
       jsonBufferRoot["ta"] = ta;
     }
     jsonBufferRoot["lang"] = XIOT_LANG;
-    jsonBufferRoot["type"] = gonfig->getType();
+    jsonBufferRoot["type"] = config->getType();
     sendRecord("module", &jsonBufferRoot);
   }
 }
