@@ -179,16 +179,12 @@ function compositeKeyValue(mac, timestamp) {
 
 // Update the added timestamp on the module record
 exports.setTimestampOnUpdate = functions.region('europe-west1').database.ref('/module/{objectId}').onUpdate((change, context) => {
-     // when deleting
-     if (!change.after.exists() != null) {
-          return null;
-     }
-     // called because of the update of the timestamp => do nothing
+     functions.logger.log('setTimestampOnUpdate');
+     // the function is called a second time since it updates the timestamp => do nothing
      if (change.after.child(GCP_TIMESTAMP_NAME).val() != null) {
           return null;
      }
-     functions.logger.log('setTimestampOnUpdate');
-     // warning this triggers a new call to this onUpdate method
+     // warning this triggers a new call to this onUpdate method, hence the test above
      return change.before.ref.child(GCP_TIMESTAMP_NAME).set(Math.ceil(Date.now() / 1000));
 });
 
