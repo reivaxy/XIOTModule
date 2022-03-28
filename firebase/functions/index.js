@@ -31,7 +31,7 @@ const COMPOSITE_KEY_NAME = "lookupKey";
 
 const MSG_MODULE_OFFLINE = "Module is no longer online";
 
-exports.deleteOldItems = functions.region('europe-west1').pubsub.schedule(`every ${PING_MAX_AGE_D} days`).onRun( (context) => {
+exports.deleteOldItems = functions.region('europe-west1').pubsub.schedule("every monday 09:00").onRun( (context) => {
      deleteOld("ping");
      deleteOld("log");    
 //     deleteOld("alert");     // May be keep longer ?
