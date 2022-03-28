@@ -370,8 +370,8 @@ void XIOTModule::addModuleEndpoints() {
 
 
     customSaveConfig();
-
-    _config->saveToEeprom();
+    firebase->sendLog("Configuration updated");
+   _config->saveToEeprom();
     sendHtml("Config saved", httpCode);
 
     delay(1000);
@@ -471,7 +471,6 @@ int XIOTModule::sendPushNotif(const char* title, const char* message) {
   root["title"] = title;
   root["message"] = message;
   root.printTo(body);
-  Debug("body : %s\n", body);
   return sendToHttps("https://api.pushover.net/1/messages.json", body);
 }
 

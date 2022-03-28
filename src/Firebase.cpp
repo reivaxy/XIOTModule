@@ -25,7 +25,7 @@ void Firebase::init() {
   if (strlen(config->getFirebaseUrl()) > 10) {
     initialized = true;
     // TODO handle authentication
-    DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 2);
+    DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 4);
     JsonObject& jsonBufferRoot = jsonBuffer.createObject();
     const char* tu = config->getPushoverUser();
     const char* ta = config->getPushoverToken();
@@ -36,6 +36,7 @@ void Firebase::init() {
       jsonBufferRoot["ta"] = ta;
     }
     jsonBufferRoot["lang"] = XIOT_LANG;
+    jsonBufferRoot["type"] = gonfig->getType();
     sendRecord("module", &jsonBufferRoot);
   }
 }
