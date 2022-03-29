@@ -22,6 +22,7 @@
 #define MSG_INIT_PO_TOKEN "Token App de PushOver"
 #define MSG_INFO_PO_TOKEN "(mettre 'aucun' pour ne pas recevoir de notif)"
 #define MSG_INIT_FIREBASE_URL "URL Firebase"
+#define MSG_INIT_FIREBASE_SECRET "Clef secrète de Firebase"
 #define MSG_INIT_CONFIRM "Confirm Upgrade Firmware ?"
 
 

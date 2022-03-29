@@ -31,8 +31,8 @@ public:
   void reset();
   void init();
   char* getDateStr(char* dateBuffer);
-  int sendToHttps(const char* method, const char* url, JsonObject* jsonBufferRoot);
-  int sendToHttps(const char* method, const char* url, const char* payload);
+  int sendToFirebase(const char* method, const char* url, JsonObject* jsonBufferRoot);
+  int sendToFirebase(const char* method, const char* url, const char* payload);
   void setCommonFields(JsonObject *jsonBufferRoot);
 
 

@@ -30,6 +30,7 @@ a{right:40px;position:absolute;text-decoration:none}\
   " MSG_INIT_HOME_PWD " <br/><input name='boxPwd' type='text' maxlength=50><br/>\ 
   " MSG_INIT_TIME_OFFSET " <br/><input name='timeOffset' type='number' value='%d'><br/>\ 
   " MSG_INIT_FIREBASE_URL " <br/><input name='firebaseUrl' type='text' maxlength=150/><br/>\
+  " MSG_INIT_FIREBASE_SECRET " <br/><input name='firebaseSecret' type='text' maxlength=49/><br/>\
   " MSG_INIT_PO_USER "<br/>" MSG_INFO_PO_TOKEN " <br/><input name='poUser' type='text' maxlength=40/><br/>\
   " MSG_INIT_PO_TOKEN " <br/><input name='poToken' type='text' maxlength=40/><br/>\
   " MSG_INIT_NOTIF_OFFLINE "<input name='ping' type='checkbox' %s/></br>\

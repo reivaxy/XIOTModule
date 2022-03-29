@@ -22,5 +22,6 @@
 #define MSG_INIT_PO_TOKEN "PushOver app token"
 #define MSG_INFO_PO_TOKEN "(set 'none' for no notif)"
 #define MSG_INIT_FIREBASE_URL "Firebase URL"
+#define MSG_INIT_FIREBASE_SECRET "Firebase Secret Token"
 #define MSG_INIT_CONFIRM "Confirmez Upgrade Firmware ?"
 

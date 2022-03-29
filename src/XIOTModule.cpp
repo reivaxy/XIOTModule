@@ -51,7 +51,6 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   firebase = new Firebase(config);
   Serial.print("Initializing module ");
   Serial.println(config->getName());
-
   // Initialise the OLED display
   _initDisplay(displayAddr, displaySda, displayScl, flipScreen, brightness);
   if(config->getUiClassName()[0] == 0) {
@@ -340,6 +339,13 @@ void XIOTModule::addModuleEndpoints() {
         firebaseUrl.remove(firebaseUrl.length() - 1);
       }
       _config->setFirebaseUrl(firebaseUrl.c_str());
+    }
+
+    // only save firebase secret token if not empty
+    String firebaseSecret = _server->arg("firebaseSecret");
+    if (firebaseSecret.length() > 0) {
+      Debug("Saving firebaseSecret\n");
+      _config->setFirebaseSecretToken(firebaseSecret.c_str());
     }
 
     // only save a ssid if its password is given

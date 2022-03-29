@@ -10,6 +10,7 @@
 #define PING_PERIOD 1000 * 60 * 5UL // 5mn
 #define DATE_BUFFER_SIZE 25
 
+#define URL_MAX_LENGTH_WITHOUT_SECRET 300
 
 Firebase::Firebase(ModuleConfigClass* config) {
   this->config = config;
@@ -88,9 +89,9 @@ int Firebase::sendRecord(const char* type, JsonObject* jsonBufferRoot) {
     return -1;
   }
   setCommonFields(jsonBufferRoot);
-  char url[300];
+  char url[URL_MAX_LENGTH_WITHOUT_SECRET];
   sprintf(url, "%s/%s/%s.json", config->getFirebaseUrl(), type, macAddrStr);
-  sendToHttps("PUT", url, jsonBufferRoot);
+  sendToFirebase("PUT", url, jsonBufferRoot);
 }
 
 int Firebase::sendEvent(const char* type, JsonObject* jsonBufferRoot) {
@@ -99,9 +100,9 @@ int Firebase::sendEvent(const char* type, JsonObject* jsonBufferRoot) {
     return -1;
   }
   setCommonFields(jsonBufferRoot);
-  char url[300];
+  char url[URL_MAX_LENGTH_WITHOUT_SECRET];
   sprintf(url, "%s/%s.json", config->getFirebaseUrl(), type);
-  sendToHttps("POST", url, jsonBufferRoot);
+  sendToFirebase("POST", url, jsonBufferRoot);
 }
 
 char* Firebase::getDateStr(char* dateBuffer) {
@@ -115,23 +116,31 @@ char* Firebase::getDateStr(char* dateBuffer) {
   return dateBuffer;
 }
 
-int Firebase::sendToHttps(const char* method, const char* url, JsonObject* jsonBufferRoot) {
-  Debug("Firebase::sendToHttps json %s %s\n", method, url);
+int Firebase::sendToFirebase(const char* method, const char* url, JsonObject* jsonBufferRoot) {
+  Debug("Firebase::sendToFirebase json %s %s\n", method, url);
   int size = jsonBufferRoot->measureLength() + 1;
   char *buff = (char*)malloc(size);
   jsonBufferRoot->printTo(buff, size);
-  int result = sendToHttps(method, url, buff);
+  int result = sendToFirebase(method, url, buff);
   free(buff);
   return result;
 }
 
-int Firebase::sendToHttps(const char* method, const char* url, const char* payload) {
-  Debug("Firebase::sendToHttps string %s %s\n", method, url);
+int Firebase::sendToFirebase(const char* method, const char* url, const char* payload) {
+  Debug("Firebase::sendToFirebase string %s %s\n", method, url);
+  char urlWithSecret[URL_MAX_LENGTH_WITHOUT_SECRET + FIREBASE_SECRET_MAX_LENGTH];
+  const char *token = config->getFirebaseSecretToken();
+  // to disable token usage, set it to small string
+  if (strlen(token) > 10) {
+    sprintf(urlWithSecret, "%s?auth=%s", url, token);
+  } else {
+    strcpy(urlWithSecret, url);
+  }
   int httpCode = -1;
   std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
   client->setInsecure();
   HTTPClient https;
-  if (https.begin(*client, url)) {
+  if (https.begin(*client, urlWithSecret)) {
     // start connection and send  headers
     https.addHeader("Content-Type", "application/json");
     if(strcmp(method, "POST") == 0) {
