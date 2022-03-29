@@ -248,6 +248,7 @@ void XIOTModule::addModuleEndpoints() {
   // OTA: update. NB: for now, master has its own api endpoint 
   _server->on("/api/ota", HTTP_POST, [&]() {
     int httpCode;
+    firebase->reset(); // don't send anything whil getting new firmware 
     if (!_config->getIsAutonomous()) {
 
       String jsonBody = _server->arg("plain");
@@ -279,8 +280,9 @@ void XIOTModule::addModuleEndpoints() {
     char *customForm = customFormInitPage();
     char *customPage = customPageInitPage();
     // Beware, update if some for values are added to the page.
-    char *page = (char*)malloc(strlen(moduleInitPage) + strlen(_config->getName())+ strlen("checked") + strlen(customForm) + strlen(customPage) + 50); 
-    sprintf(page, moduleInitPage, _config->getName(), _config->getName(),
+    String pageTemplate(FPSTR(moduleInitPage));
+    char *page = (char*)malloc(strlen(pageTemplate.c_str()) + strlen(_config->getName())+ strlen("checked") + strlen(customForm) + strlen(customPage) + 50); 
+    sprintf(page, pageTemplate.c_str(), _config->getName(), _config->getName(),
                                   _config->getIsAutonomous()? "checked":"",
                                   _config->getGmtMinOffset(),
                                   _config->getSendFirebasePing()? "checked":"",
@@ -376,8 +378,8 @@ void XIOTModule::addModuleEndpoints() {
 
 
     customSaveConfig();
-    firebase->sendLog("Configuration updated");
-   _config->saveToEeprom();
+    firebase->sendDifferedLog("Configuration updated");
+    _config->saveToEeprom();
     sendHtml("Config saved", httpCode);
 
     delay(1000);
@@ -952,7 +954,7 @@ void XIOTModule::loop() {
       delay(300); // Otherwise message can't be read !
     } 
   } 
-   
+
   // Time on display should be refreshed every second
   // Intentionnally not using the value returned by now(), since it changes
   // when time is set.

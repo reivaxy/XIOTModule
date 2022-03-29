@@ -8,6 +8,8 @@
 
 #include "XIOTModuleDebug.h"
 #include <XIOTConfig.h>
+#include <WString.h>
+#include <pgmspace.h>
 #include <XIOTDisplay.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
@@ -46,6 +48,7 @@ extern "C" {
 
 #define JSON_BUFFER_REGISTER_SIZE JSON_OBJECT_SIZE(20)
 #define JSON_STRING_REGISTER_SIZE 1000 + MAX_CUSTOM_DATA_SIZE
+
 
 class XIOTModuleJsonTag {
 public:

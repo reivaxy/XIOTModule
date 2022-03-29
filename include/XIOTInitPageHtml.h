@@ -7,7 +7,7 @@
 
  #include "XIOTMessages.h"
 
-char moduleInitPage[] = "\
+static const char moduleInitPage[] PROGMEM = "\
 <html title='Agent init page'>\
 <head>\
 <meta charset='UTF-8'>\

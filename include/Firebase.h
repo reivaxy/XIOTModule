@@ -16,6 +16,7 @@
 #include <ArduinoJson.h>
 #include <XIOTConfig.h>
 #include "XIOTMessages.h"
+#include "XIOTModuleDebug.h"
 
 // TODO handle authent
 class Firebase {
@@ -27,19 +28,21 @@ public:
   int sendEvent(const char* type, JsonObject* jsonBuffer); 
   int sendLog(const char* message); 
   int sendAlert(const char* message); 
-  int sendLog(const char* message, const char* type); 
+  int sendLog(const char* type, const char* message); 
   void reset();
   void init();
   char* getDateStr(char* dateBuffer);
   int sendToFirebase(const char* method, const char* url, JsonObject* jsonBufferRoot);
-  int sendToFirebase(const char* method, const char* url, const char* payload);
+  int sendToFirebase(const char* method, const char* url, char* payload);
   void setCommonFields(JsonObject *jsonBufferRoot);
-
+  void sendDifferedLog(const char* logMessage);
+  void handleDifferedLogs();
 
   ModuleConfigClass* config;
   unsigned long lastSendPing = 0;
   char macAddrStr[20];
   boolean initialized = false;
+  String *differedMessages[10]; // max ten messages
 
 };
 
