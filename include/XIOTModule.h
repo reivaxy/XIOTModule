@@ -105,6 +105,7 @@ public:
   virtual char* useData(const char* data, int* responseCode);
   virtual char* emptyMallocedResponse();
   virtual int _refreshMaster();
+  virtual void setCustomModuleRecordFields(JsonObject *jsonBufferRoot);
   
   DisplayClass* getDisplay();
   ESP8266WebServer* getServer();
@@ -161,7 +162,8 @@ public:
   bool _ntpEventToProcess = false;
   bool _ntpServerInitialized = false;
   bool _ntpListenerInitialized = false;
-  
+  char macAddrStr[MAC_ADDR_MAX_LENGTH + 1];
+
 
   NTPSyncEvent_t _ntpEvent;
 };

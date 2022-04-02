@@ -30,7 +30,7 @@ public:
   int sendAlert(const char* message); 
   int sendLog(const char* type, const char* message); 
   void reset();
-  void init();
+  void init(const char* macAddrStr);
   char* getDateStr(char* dateBuffer);
   int sendToFirebase(const char* method, const char* url, JsonObject* jsonBufferRoot);
   int sendToFirebase(const char* method, const char* url, char* payload);

@@ -22,31 +22,14 @@ Firebase::Firebase(ModuleConfigClass* config) {
 }
 
    
-void Firebase::init() {
+void Firebase::init(const char* macAddrStr) {
   Debug("Firebase::init\n");
+  strcpy(this->macAddrStr, macAddrStr);
   uint32_t freeMem = system_get_free_heap_size();
   Debug("Heap at begining of Firebase::init: %d\n", freeMem); 
-  uint8_t macAddr[6];
-  WiFi.macAddress(macAddr);
-  sprintf(macAddrStr, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]);
   lastSendPing = 0;
-
   if (strlen(config->getFirebaseUrl()) > 10) {
     initialized = true;
-    // TODO handle authentication
-    DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 4);
-    JsonObject& jsonBufferRoot = jsonBuffer.createObject();
-    const char* tu = config->getPushoverUser();
-    const char* ta = config->getPushoverToken();
-    // Tokens need to be provided, and ping activated. 
-    // If ping is not activated, providing tokens will trigger notifications on Firebase, we don't want that
-    if (config->getSendFirebasePing() && strlen(tu) > 10 && strlen(ta) > 10) {
-      jsonBufferRoot["tu"] = tu;
-      jsonBufferRoot["ta"] = ta;
-    }
-    jsonBufferRoot["lang"] = XIOT_LANG;
-    jsonBufferRoot["type"] = config->getType();
-    sendRecord("module", &jsonBufferRoot);
   }
 }
 
@@ -67,6 +50,7 @@ void Firebase::loop() {
     // Let's flag the first ping after boot
     if (millis() < 60000) {
       jsonBufferRoot["init"] = true;
+      jsonBufferRoot["init_reason"] = ESP.getResetReason();
     }
     sendEvent("ping", &jsonBufferRoot);
   }
@@ -95,6 +79,10 @@ void Firebase::setCommonFields(JsonObject *jsonBufferRoot) {
   jsonBufferRoot->set("mac", macAddrStr);
   char date[DATE_BUFFER_SIZE];
   jsonBufferRoot->set("date", getDateStr(date));
+  #ifdef DEBUG_XIOTMODULE
+  uint32_t freeMem = system_get_free_heap_size();
+  jsonBufferRoot->set("heap_size", freeMem);
+  #endif
 }
 
 int Firebase::sendRecord(const char* type, JsonObject* jsonBufferRoot) {
@@ -131,7 +119,7 @@ char* Firebase::getDateStr(char* dateBuffer) {
 }
 
 int Firebase::sendToFirebase(const char* method, const char* url, JsonObject* jsonBufferRoot) {
-  Debug("Firebase::sendToFirebase json %s %s\n", method, url);
+  Debug("Firebase::sendToFirebase json\n");
   int size = jsonBufferRoot->measureLength() + 3;
   Debug("Firebase buffer size %d\n", size);
   char *buff = (char*)malloc(size);
@@ -144,6 +132,10 @@ int Firebase::sendToFirebase(const char* method, const char* url, JsonObject* js
 
 int Firebase::sendToFirebase(const char* method, const char* url, char* payload) {
   Debug("Firebase::sendToFirebase string %s %s\n", method, url);
+  //security. Should be useless since tested ealier to avoid useless json creation.
+  if (!initialized) {
+    return -1;
+  }
   uint32_t freeMem = system_get_free_heap_size();
   Debug("Heap before sending to Firebase: %d\n", freeMem); 
   // https requires a sh*tload of ram
@@ -210,7 +202,7 @@ void Firebase::sendDifferedLog(const char* logMessage) {
 }
 
 void Firebase::handleDifferedLogs() {
-  if (differedMessages[0] == NULL) {
+  if (!initialized || differedMessages[0] == NULL) {
     return;
   }
   sendLog(differedMessages[0]->c_str());

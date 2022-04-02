@@ -51,6 +51,9 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   firebase = new Firebase(config);
   Serial.print("Initializing module ");
   Serial.println(config->getName());
+  #ifdef GIT_REV
+  Serial.printf("Version %s\n", GIT_REV);
+  #endif  
   // Initialise the OLED display
   _initDisplay(displayAddr, displaySda, displayScl, flipScreen, brightness);
   if(config->getUiClassName()[0] == 0) {
@@ -112,7 +115,9 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   });
 
   WiFi.mode(WIFI_AP_STA);  
-
+  uint8_t macAddr[6];
+  WiFi.macAddress(macAddr);
+  sprintf(macAddrStr, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]);
   _connectSTA();
   _initSoftAP();
 }
@@ -121,12 +126,12 @@ ESP8266WebServer* XIOTModule::getServer() {
   return _server;
 }
 
-  void XIOTModule::waitForOta() {
-    char message[30];
-    sprintf(message, "OTA ready: %s", _localIP);
-    _oledDisplay->setLine(0, message, NOT_TRANSIENT, NOT_BLINKING);
-    ArduinoOTA.begin();    
-  }
+void XIOTModule::waitForOta() {
+  char message[30];
+  sprintf(message, "OTA ready: %s", _localIP);
+  _oledDisplay->setLine(0, message, NOT_TRANSIENT, NOT_BLINKING);
+  ArduinoOTA.begin();    
+}
 
 void XIOTModule::processNtpEvent() {
   Debug("XIOTModule::processNtpEvent\n");
@@ -141,7 +146,26 @@ void XIOTModule::processNtpEvent() {
     _timeInitialized = true;
     _timeDisplay();
     NTP.setInterval(7200, 7200);  // 2h retry, 2h refresh. once we have time, refresh failure is not critical
-    firebase->init();
+    firebase->init(macAddrStr);
+    DynamicJsonBuffer jsonBuffer(8);
+    JsonObject& jsonBufferRoot = jsonBuffer.createObject();
+    const char* tu = _config->getPushoverUser();
+    const char* ta = _config->getPushoverToken();
+    // Tokens need to be provided, and ping activated. 
+    // If ping is not activated, providing tokens will trigger notifications on Firebase, we don't want that
+    if (_config->getSendFirebasePing() && strlen(tu) > 10 && strlen(ta) > 10) {
+      jsonBufferRoot["tu"] = tu;
+      jsonBufferRoot["ta"] = ta;
+    }
+    jsonBufferRoot["lang"] = XIOT_LANG;
+    jsonBufferRoot["type"] = _config->getType();
+    #ifdef GIT_REV
+    jsonBufferRoot["version"] = GIT_REV;
+    #endif
+    setCustomModuleRecordFields(&jsonBufferRoot);
+   
+    firebase->sendRecord("module", &jsonBufferRoot);
+        
   }
 }
 
@@ -608,15 +632,12 @@ void XIOTModule::_register() {
   free(payload);
 }
 
+
 /**
  * Returns a malloced string with config
  * Caller needs to free it
  */
 char* XIOTModule::_buildFullPayload() {
-  char macAddrStr[20];
-  uint8_t macAddr[6];
-  WiFi.macAddress(macAddr);
-  sprintf(macAddrStr, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]);
   StaticJsonBuffer<JSON_BUFFER_CONFIG_SIZE> jsonBuffer;
   JsonObject& root = jsonBuffer.createObject();
   root[XIOTModuleJsonTag::name] = _config->getName();
@@ -1035,6 +1056,9 @@ int XIOTModule::customSaveConfig() {
   return 200;
 }
 
+void XIOTModule::setCustomModuleRecordFields(JsonObject *jsonBufferRoot) {
+  return;
+}
 
 
 
