@@ -16,7 +16,7 @@
 
 Firebase::Firebase(ModuleConfigClass* config) {
   this->config = config;
-  for (int i=0; i < 9; i++) {
+  for (int i=0; i < MAX_DIFFERED_MESSAGES_COUNT; i++) {
     differedMessages[i] = NULL;
   }
 }
@@ -185,7 +185,7 @@ int Firebase::sendToFirebase(const char* method, const char* url, char* payload)
 void Firebase::sendDifferedLog(const char* logMessage) {
   String **differedMessagePile = differedMessages;
   int count = 0;
-  while (count <10) {
+  while (count < MAX_DIFFERED_MESSAGES_COUNT) {
     if (*differedMessagePile == NULL) {
       *differedMessagePile = new String(logMessage);
       Debug("Differed message added at position %d\n", count);
@@ -194,22 +194,30 @@ void Firebase::sendDifferedLog(const char* logMessage) {
     differedMessagePile ++;
     count ++;
   }
-  if (count == 10) {
+  if (count == MAX_DIFFERED_MESSAGES_COUNT) {
     Debug("Differed message pile full, message lost\n");    
   }
 }
 
 void Firebase::handleDifferedLogs() {
+  unsigned long timeNow = millis();
   if (!initialized || differedMessages[0] == NULL) {
     return;
   }
+
+  if(!XUtils::isElapsedDelay(timeNow, &lastHandledDifferedMessage, HANDLE_DIFFERED_MESSAGES_DELAY)) {
+    return;
+  }
+
   int httpCode = sendLog(differedMessages[0]->c_str());
 
   if (httpCode == 200) {
     delete(differedMessages[0]);
-    for (int i=0; i < 9; i++) {
+    for (int i=0; i < MAX_DIFFERED_MESSAGES_COUNT - 1; i++) {
       differedMessages[i] = differedMessages[i+1];
     }
-    differedMessages[9] = NULL;
+    differedMessages[MAX_DIFFERED_MESSAGES_COUNT - 1] = NULL;
+  } else {
+    Debug("Differed message not sent, will retry\n");
   }
 }

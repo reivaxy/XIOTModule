@@ -18,6 +18,9 @@
 #include "XIOTMessages.h"
 #include "XIOTModuleDebug.h"
 
+#define MAX_DIFFERED_MESSAGES_COUNT 10
+#define HANDLE_DIFFERED_MESSAGES_DELAY 2000  // 2s
+
 // TODO handle authent
 class Firebase {
 public:
@@ -42,7 +45,8 @@ public:
   unsigned long lastSendPing = 0;
   char macAddrStr[20];
   boolean initialized = false;
-  String *differedMessages[20]; // max ten messages
+  String *differedMessages[MAX_DIFFERED_MESSAGES_COUNT];
+  unsigned long lastHandledDifferedMessage = 0;
   
   bool sendInitPing = true;
 
