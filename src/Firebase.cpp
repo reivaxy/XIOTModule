@@ -8,7 +8,7 @@
 #include <exception>
 
 
-#define COMMON_FIELD_COUNT 3
+#define COMMON_FIELD_COUNT 5
 #define PING_PERIOD 1000 * 60 * 5UL // 5mn
 #define DATE_BUFFER_SIZE 25
 
@@ -25,8 +25,7 @@ Firebase::Firebase(ModuleConfigClass* config) {
 void Firebase::init(const char* macAddrStr) {
   Debug("Firebase::init\n");
   strcpy(this->macAddrStr, macAddrStr);
-  uint32_t freeMem = system_get_free_heap_size();
-  Debug("Heap at begining of Firebase::init: %d\n", freeMem); 
+  Debug("Heap at begining of Firebase::init: %d\n", system_get_free_heap_size()); 
   lastSendPing = 0;
   if (strlen(config->getFirebaseUrl()) > 10) {
     initialized = true;
@@ -43,9 +42,10 @@ void Firebase::loop() {
     return ;
   }
 
+  // send a ping every PING_PERIOD
   unsigned long timeNow = now() * 1000; // don't use millis, it's 0 when starting :)
   if (config->getSendFirebasePing() && XUtils::isElapsedDelay(timeNow, &lastSendPing, PING_PERIOD)) {
-    DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 1);
+    DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 5);
     JsonObject& jsonBufferRoot = jsonBuffer.createObject();
     // Let's flag the first ping after boot
     if (sendInitPing) {
@@ -53,58 +53,42 @@ void Firebase::loop() {
       jsonBufferRoot["init_reason"] = ESP.getResetReason();
       sendInitPing = false;
     }
-    sendEvent("ping", &jsonBufferRoot);
+    jsonBufferRoot["failed_msg"] = failedMessageCount;
+    jsonBufferRoot["retried_msg"] = retriedMessage;
+    jsonBufferRoot["lost_msg"] = lostMessageCount;
+    setCommonFields(&jsonBufferRoot);
+    differMessage(MESSAGE_PING, &jsonBufferRoot);
   }
 
-  handleDifferedLogs();
+  handleDifferedMessages();
 }
 
-int Firebase::sendAlert(const char* alertMessage) {
-  return sendLog("alert", alertMessage);
-}
-
-int Firebase::sendLog(const char* logMessage) {
-  return sendLog("log", logMessage);
-}
-
-int Firebase::sendLog(const char* type, const char* logMessage) {
-  DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 2);
-  JsonObject& jsonBufferRoot = jsonBuffer.createObject();
-  jsonBufferRoot["message"] = logMessage;
-  jsonBufferRoot["lang"] = XIOT_LANG;
-  return sendEvent(type, &jsonBufferRoot);
-}
-
-void Firebase::setCommonFields(JsonObject *jsonBufferRoot) {
+void Firebase::setCommonFields(JsonObject* jsonBufferRoot) {
+  jsonBufferRoot->set("lang", XIOT_LANG);
   jsonBufferRoot->set("name", config->getName());
   jsonBufferRoot->set("mac", macAddrStr);
   char date[DATE_BUFFER_SIZE];
   jsonBufferRoot->set("date", getDateStr(date));
   uint32_t freeMem = system_get_free_heap_size();
   jsonBufferRoot->set("heap_size", freeMem);
-
 }
 
-int Firebase::sendRecord(const char* type, JsonObject* jsonBufferRoot) {
+void Firebase::differRecord(const char* type, JsonObject* jsonBufferRoot) {
   Debug("Firebase::sendRecord\n");
-  if (!initialized) {
-    return -1;
-  }
   setCommonFields(jsonBufferRoot);
-  char url[URL_MAX_LENGTH_WITHOUT_SECRET];
-  sprintf(url, "%s/%s/%s.json", config->getFirebaseUrl(), type, macAddrStr);
-  sendToFirebase("PUT", url, jsonBufferRoot);
+  String serialized = "";
+  jsonBufferRoot->printTo(serialized);
+  differMessage(MESSAGE_MODULE, serialized);
 }
 
-int Firebase::sendEvent(const char* type, JsonObject* jsonBufferRoot) {
-  Debug("Firebase::sendEvent\n");
-  if (!initialized) {
-    return -1;
-  }
-  setCommonFields(jsonBufferRoot);
+int Firebase::sendEvent(const char* type, const char* logMessage) {
+  DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 1);
+  JsonObject& jsonBufferRoot = jsonBuffer.createObject();
+  jsonBufferRoot["message"] = logMessage;
+  setCommonFields(&jsonBufferRoot);
   char url[URL_MAX_LENGTH_WITHOUT_SECRET];
   sprintf(url, "%s/%s.json", config->getFirebaseUrl(), type);
-  return sendToFirebase("POST", url, jsonBufferRoot);
+  return sendToFirebase("POST", url, &jsonBufferRoot);
 }
 
 char* Firebase::getDateStr(char* dateBuffer) {
@@ -130,7 +114,7 @@ int Firebase::sendToFirebase(const char* method, const char* url, JsonObject* js
   return result;
 }
 
-int Firebase::sendToFirebase(const char* method, const char* url, char* payload) {
+int Firebase::sendToFirebase(const char* method, const char* url, const char* payload) {
   Debug("Firebase::sendToFirebase string %s %s\n", method, url);
   //security. Should be useless since tested ealier to avoid useless json creation.
   if (!initialized) {
@@ -139,6 +123,9 @@ int Firebase::sendToFirebase(const char* method, const char* url, char* payload)
   uint32_t freeMem = system_get_free_heap_size();
   Debug("Heap before sending to Firebase: %d\n", freeMem); 
 
+// Debugging stuff
+// Serial.println(payload);
+// return -1;
 
   char urlWithSecret[URL_MAX_LENGTH_WITHOUT_SECRET + FIREBASE_SECRET_MAX_LENGTH];
   const char *token = config->getFirebaseSecretToken();
@@ -182,13 +169,23 @@ int Firebase::sendToFirebase(const char* method, const char* url, char* payload)
 }
 
 // Trying to send a message while processing an incoming request crashes the module
-void Firebase::sendDifferedLog(const char* logMessage) {
-  String **differedMessagePile = differedMessages;
+// => handling a pile of messages that will be processed later, with retries.
+void Firebase::differMessage(MessageType type,  JsonObject* jsonBufferRoot) {
+  String serialized = "";
+  jsonBufferRoot->printTo(serialized);
+  differMessage(type, serialized);
+}
+
+void Firebase::differMessage(String message) {
+  differMessage(MESSAGE_LOG, message);
+}
+void Firebase::differMessage(MessageType type, String message) {
+  Message **differedMessagePile = differedMessages;
   int count = 0;
   while (count < MAX_DIFFERED_MESSAGES_COUNT) {
     if (*differedMessagePile == NULL) {
-      *differedMessagePile = new String(logMessage);
-      Debug("Differed message added at position %d\n", count);
+      *differedMessagePile = new Message(type, message);
+      Debug("Message added at position %d\n", count);
       break;
     }
     differedMessagePile ++;
@@ -196,28 +193,77 @@ void Firebase::sendDifferedLog(const char* logMessage) {
   }
   if (count == MAX_DIFFERED_MESSAGES_COUNT) {
     Debug("Differed message pile full, message lost\n");    
+    lostMessageCount ++;
   }
 }
 
-void Firebase::handleDifferedLogs() {
-  unsigned long timeNow = millis();
+void Firebase::handleDifferedMessages() {
   if (!initialized || differedMessages[0] == NULL) {
     return;
   }
-
-  if(!XUtils::isElapsedDelay(timeNow, &lastHandledDifferedMessage, HANDLE_DIFFERED_MESSAGES_DELAY)) {
+  unsigned long timeNow = millis();
+  if(!XUtils::isElapsedDelay(timeNow, &lastHandledDifferedMessage, currentDifferedMessageDelay)) {
     return;
   }
+  int httpCode = -1;
+  differedMessages[0]->retryCount ++;
+  differedMessages[0]->initialTime = timeNow;
+  Debug("Sending message, try number %d\n", differedMessages[0]->retryCount);
+  char url[URL_MAX_LENGTH_WITHOUT_SECRET];
+  switch(differedMessages[0]->type) {
+    case MESSAGE_LOG:
+      httpCode = sendEvent("log", differedMessages[0]->message.c_str());
+      break;
 
-  int httpCode = sendLog(differedMessages[0]->c_str());
+    case MESSAGE_ALERT:
+      httpCode = sendEvent("alert", differedMessages[0]->message.c_str());
+      break;
 
-  if (httpCode == 200) {
+    case MESSAGE_PING:
+      sprintf(url, "%s/ping.json", config->getFirebaseUrl());    
+      httpCode = sendToFirebase("POST", url, differedMessages[0]->message.c_str());
+      break;
+
+    case MESSAGE_MODULE:
+      sprintf(url, "%s/module/%s.json", config->getFirebaseUrl(), macAddrStr);    
+      httpCode = sendToFirebase("PUT", url, differedMessages[0]->message.c_str());
+      break;
+
+    case MESSAGE_CUSTOM:
+    case RECORD_CUSTOM:
+    default:
+      Debug("Message type not supported yet\n");
+  }
+  boolean deleteMessage = false;
+  if (httpCode != 200) {
+    if (differedMessages[0]->retryCount >= MAX_RETRY_MESSAGE_COUNT) {
+      Debug("Differed message not sent, but already retried %d times: deleting\n", MAX_RETRY_MESSAGE_COUNT);
+      deleteMessage = true;
+      failedMessageCount ++;
+    } else {
+      Debug("Differed message not sent, will retry\n");
+      retriedMessage ++;
+      // Increase the retry delay if not already max
+      if (currentDifferedMessageDelay < MAX_RETRY_DELAY) {
+        currentDifferedMessageDelay += 250;
+      }
+    }
+  } else {
+    deleteMessage = true;
+  }
+
+  if (deleteMessage) {
+    // Reset the retry delay
+    currentDifferedMessageDelay = HANDLE_DIFFERED_MESSAGES_DEFAULT_DELAY_MS;
+    // Shift the message fifo queue
     delete(differedMessages[0]);
+    differedMessages[0] = NULL;
     for (int i=0; i < MAX_DIFFERED_MESSAGES_COUNT - 1; i++) {
       differedMessages[i] = differedMessages[i+1];
     }
     differedMessages[MAX_DIFFERED_MESSAGES_COUNT - 1] = NULL;
-  } else {
-    Debug("Differed message not sent, will retry\n");
   }
+  
+
+  
 }

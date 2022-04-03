@@ -163,7 +163,7 @@ void XIOTModule::processNtpEvent() {
     #endif
     setCustomModuleRecordFields(&jsonBufferRoot);
    
-    firebase->sendRecord("module", &jsonBufferRoot);
+    firebase->differRecord("module", &jsonBufferRoot);
         
   }
 }
@@ -401,7 +401,7 @@ void XIOTModule::addModuleEndpoints() {
 
 
     customSaveConfig();
-    firebase->sendDifferedLog("Configuration updated");
+    firebase->differMessage(MESSAGE_LOG, "Configuration updated");
     _config->saveToEeprom();
     sendHtml("Config saved", httpCode);
 
