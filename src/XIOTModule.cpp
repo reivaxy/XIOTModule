@@ -64,7 +64,6 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   
   // Initialize the web server for the API and config page
   _server = new ESP8266WebServer(80);
-
   addModuleEndpoints();
   
   NTP.onNTPSyncEvent([&](NTPSyncEvent_t event) {

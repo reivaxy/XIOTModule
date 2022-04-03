@@ -42,7 +42,10 @@ public:
   unsigned long lastSendPing = 0;
   char macAddrStr[20];
   boolean initialized = false;
-  String *differedMessages[10]; // max ten messages
+  String *differedMessages[20]; // max ten messages
+  
+  bool sendInitPing = true;
+
 
 };
 

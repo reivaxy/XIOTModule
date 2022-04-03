@@ -48,9 +48,10 @@ void Firebase::loop() {
     DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 1);
     JsonObject& jsonBufferRoot = jsonBuffer.createObject();
     // Let's flag the first ping after boot
-    if (millis() < 60000) {
+    if (sendInitPing) {
       jsonBufferRoot["init"] = true;
       jsonBufferRoot["init_reason"] = ESP.getResetReason();
+      sendInitPing = false;
     }
     sendEvent("ping", &jsonBufferRoot);
   }
@@ -79,10 +80,9 @@ void Firebase::setCommonFields(JsonObject *jsonBufferRoot) {
   jsonBufferRoot->set("mac", macAddrStr);
   char date[DATE_BUFFER_SIZE];
   jsonBufferRoot->set("date", getDateStr(date));
-  #ifdef DEBUG_XIOTMODULE
   uint32_t freeMem = system_get_free_heap_size();
   jsonBufferRoot->set("heap_size", freeMem);
-  #endif
+
 }
 
 int Firebase::sendRecord(const char* type, JsonObject* jsonBufferRoot) {
@@ -104,7 +104,7 @@ int Firebase::sendEvent(const char* type, JsonObject* jsonBufferRoot) {
   setCommonFields(jsonBufferRoot);
   char url[URL_MAX_LENGTH_WITHOUT_SECRET];
   sprintf(url, "%s/%s.json", config->getFirebaseUrl(), type);
-  sendToFirebase("POST", url, jsonBufferRoot);
+  return sendToFirebase("POST", url, jsonBufferRoot);
 }
 
 char* Firebase::getDateStr(char* dateBuffer) {
@@ -121,7 +121,7 @@ char* Firebase::getDateStr(char* dateBuffer) {
 int Firebase::sendToFirebase(const char* method, const char* url, JsonObject* jsonBufferRoot) {
   Debug("Firebase::sendToFirebase json\n");
   int size = jsonBufferRoot->measureLength() + 3;
-  Debug("Firebase buffer size %d\n", size);
+  Debug("Firebase json buffer size %d\n", size);
   char *buff = (char*)malloc(size);
   jsonBufferRoot->printTo(buff, size);
   
@@ -138,11 +138,8 @@ int Firebase::sendToFirebase(const char* method, const char* url, char* payload)
   }
   uint32_t freeMem = system_get_free_heap_size();
   Debug("Heap before sending to Firebase: %d\n", freeMem); 
-  // https requires a sh*tload of ram
-  // if (freeMem < 32200) {
-  //   Serial.println("Not enough memory to send request to firebase\n");
-  //   return -3;
-  // }
+
+
   char urlWithSecret[URL_MAX_LENGTH_WITHOUT_SECRET + FIREBASE_SECRET_MAX_LENGTH];
   const char *token = config->getFirebaseSecretToken();
   // to disable token usage, set it to small string
@@ -153,10 +150,11 @@ int Firebase::sendToFirebase(const char* method, const char* url, char* payload)
   }
   int httpCode = -1;
   WiFiClientSecure client;
+  client.setTimeout(3000);
   client.setInsecure();
   // use small buffers since payloads are small
   // Otherwise it will use almost 30K of ram and sometimes crash :(
-  client.setBufferSizes(1024, 1024);  
+  client.setBufferSizes(2048, 2048);  
   HTTPClient https;
   if (https.begin(client, urlWithSecret)) {
     // start connection and send  headers
@@ -205,10 +203,13 @@ void Firebase::handleDifferedLogs() {
   if (!initialized || differedMessages[0] == NULL) {
     return;
   }
-  sendLog(differedMessages[0]->c_str());
-  delete(differedMessages[0]);
-  for (int i=0; i < 9; i++) {
-    differedMessages[i] = differedMessages[i+1];
+  int httpCode = sendLog(differedMessages[0]->c_str());
+
+  if (httpCode == 200) {
+    delete(differedMessages[0]);
+    for (int i=0; i < 9; i++) {
+      differedMessages[i] = differedMessages[i+1];
+    }
+    differedMessages[9] = NULL;
   }
-  differedMessages[9] = NULL;
 }

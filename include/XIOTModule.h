@@ -164,6 +164,5 @@ public:
   bool _ntpListenerInitialized = false;
   char macAddrStr[MAC_ADDR_MAX_LENGTH + 1];
 
-
   NTPSyncEvent_t _ntpEvent;
 };
