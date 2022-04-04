@@ -30,7 +30,7 @@ public:
   Firebase(ModuleConfigClass* config);
 
   void loop();
-  void reset();
+  void disable();
   void init(const char* macAddrStr);
 
   void setCommonFields(JsonObject *jsonBufferRoot);
@@ -58,7 +58,7 @@ public:
   unsigned long currentDifferedMessageDelay = HANDLE_DIFFERED_MESSAGES_DEFAULT_DELAY_MS;
   unsigned int lostMessageCount = 0;
   unsigned int failedMessageCount = 0;
-  unsigned int retriedMessage = 0;
+  unsigned int retriedMessageCount = 0;
 
   bool sendInitPing = true;
 

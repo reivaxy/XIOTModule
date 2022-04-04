@@ -32,8 +32,8 @@ void Firebase::init(const char* macAddrStr) {
   }
 }
 
-void Firebase::reset() {
-  Debug("Firebase::reset\n");
+void Firebase::disable() {
+  Debug("Firebase::disable\n");
   initialized = false;
 }
 
@@ -54,7 +54,7 @@ void Firebase::loop() {
       sendInitPing = false;
     }
     jsonBufferRoot["failed_msg"] = failedMessageCount;
-    jsonBufferRoot["retried_msg"] = retriedMessage;
+    jsonBufferRoot["retried_msg"] = retriedMessageCount;
     jsonBufferRoot["lost_msg"] = lostMessageCount;
     differMessage(MESSAGE_PING, &jsonBufferRoot);
   }
@@ -253,7 +253,7 @@ void Firebase::handleDifferedMessages() {
       failedMessageCount ++;
     } else {
       Debug("Differed message not sent, will retry\n");
-      retriedMessage ++;
+      retriedMessageCount ++;
       // Increase the retry delay if not already max
       if (currentDifferedMessageDelay < MAX_RETRY_DELAY) {
         currentDifferedMessageDelay += 250;
@@ -273,6 +273,13 @@ void Firebase::handleDifferedMessages() {
       differedMessages[i] = differedMessages[i+1];
     }
     differedMessages[MAX_DIFFERED_MESSAGES_COUNT - 1] = NULL;
+    // No more messages to send ?
+    if (differedMessages[0] == NULL) {
+      Debug("No more differed messages\n");
+      failedMessageCount = 0;
+      retriedMessageCount = 0;
+      lostMessageCount = 0;
+    }
   }
   
 

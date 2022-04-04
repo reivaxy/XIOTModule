@@ -11,9 +11,9 @@ Message::Message(MessageType type, String message) {
    this->message = message;
 }
 
-Message::Message(const char* customType, String message) {
-   this->type = MESSAGE_CUSTOM;
-   strncpy(this->customType, customType, CUSTOM_TYPE_LENGTH_MAX);
-   this->customType[CUSTOM_TYPE_LENGTH_MAX] = 0;
+Message::Message(const char* customType, String id, String message) {
+   this->type = id == NULL ? MESSAGE_CUSTOM : RECORD_CUSTOM ; // is this an event or a record. events have self generated ids, records don't
+   this->id = id;
+   this->customType = customType;
    this->message = message;
 }

@@ -74,6 +74,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
 
   // Nb: & allows to keep the reference to the caller object in the lambda block
   _wifiSTAGotIpHandler = WiFi.onStationModeGotIP([&](WiFiEventStationModeGotIP ipInfo) {
+    firebase->differMessage("Connected to wifi");
     strcpy(_localIP, ipInfo.ip.toString().c_str());
     if(isWaitingOTA()) {
       waitForOta();
@@ -85,18 +86,23 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
       
       // If autonomous, connected to internet through box ssid => need to fetch time from NTP server
       if(_config->getIsAutonomous()) {       
-        _ntpServerInitialized = true;
-        Debug("Fetching time from %s\n", _config->getNtpServer());
-        // TODO: can this be improved so that we need not update the config twice a year?
-        int offset = _config->getGmtMinOffset(); // minutes
-        int hours = offset / 60;
-        int minutes = offset - (hours * 60);
-        NTP.begin(_config->getNtpServer(), hours, true, minutes);
-        NTP.setInterval(10, 7200);  // 10s retry, 2h refresh. Firt try usually fails, second usually works.
-        NTP.setTimeZone(hours, minutes);
+        if (!_ntpServerInitialized) {
+          _ntpServerInitialized = true;
+          Debug("Fetching time from %s\n", _config->getNtpServer());
+          // TODO: can this be improved so that we need not update the config twice a year?
+          int offset = _config->getGmtMinOffset(); // minutes
+          int hours = offset / 60;
+          int minutes = offset - (hours * 60);
+          NTP.begin(_config->getNtpServer(), hours, true, minutes);
+          NTP.setInterval(10, 6 * 3600);  // 10s retry (Firt try usually fails, second usually works), 6h refresh. 
+          NTP.setTimeZone(hours, minutes);
+        } else {
+          firebase->init(macAddrStr);
+        }
 
       } else if(strcmp(DEFAULT_XIOT_APPWD, _config->getXiotPwd()) != 0) {
        // If non autonomous, module is connected to the customized SSID, and it can register itself to master
+       // it will get the current date time from master.
         Serial.println("Non autonomous module ready to register");
         _canRegister = true;
       }
@@ -144,7 +150,7 @@ void XIOTModule::processNtpEvent() {
     Debug("NTP time: %s\n", NTP.getTimeDateString(NTP.getLastNTPSync()).c_str());
     _timeInitialized = true;
     _timeDisplay();
-    NTP.setInterval(7200, 7200);  // 2h retry, 2h refresh. once we have time, refresh failure is not critical
+    NTP.setInterval(6 * 3600, 6 * 3600);  // 6h retry, 6h refresh. once we have time, refresh failure is not critical
     firebase->init(macAddrStr);
     DynamicJsonBuffer jsonBuffer(8);
     JsonObject& jsonBufferRoot = jsonBuffer.createObject();
@@ -271,7 +277,7 @@ void XIOTModule::addModuleEndpoints() {
   // OTA: update. NB: for now, master has its own api endpoint 
   _server->on("/api/ota", HTTP_POST, [&]() {
     int httpCode;
-    firebase->reset(); // don't send anything whil getting new firmware 
+    firebase->disable(); // don't send anything whil getting new firmware 
     if (!_config->getIsAutonomous()) {
 
       String jsonBody = _server->arg("plain");
@@ -539,7 +545,7 @@ void XIOTModule::_connectSTA() {
   _canQueryMasterConfig = false;
   _canRegister = false;
   _wifiConnected = false;
-  firebase->reset();
+  firebase->disable();
   const char* ssid =_config->getSTASsid();
   if(*ssid != 0) {
     Debug("XIOTModule::_connectSTA: %s\n", ssid);
