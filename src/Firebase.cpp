@@ -56,7 +56,6 @@ void Firebase::loop() {
     jsonBufferRoot["failed_msg"] = failedMessageCount;
     jsonBufferRoot["retried_msg"] = retriedMessage;
     jsonBufferRoot["lost_msg"] = lostMessageCount;
-    setCommonFields(&jsonBufferRoot);
     differMessage(MESSAGE_PING, &jsonBufferRoot);
   }
 
@@ -82,13 +81,19 @@ void Firebase::differRecord(const char* type, JsonObject* jsonBufferRoot) {
 }
 
 int Firebase::sendEvent(const char* type, const char* logMessage) {
-  DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 1);
-  JsonObject& jsonBufferRoot = jsonBuffer.createObject();
-  jsonBufferRoot["message"] = logMessage;
-  setCommonFields(&jsonBufferRoot);
   char url[URL_MAX_LENGTH_WITHOUT_SECRET];
   sprintf(url, "%s/%s.json", config->getFirebaseUrl(), type);
-  return sendToFirebase("POST", url, &jsonBufferRoot);
+
+  // If the message string contains Json, send it as it is
+  if (strncmp(logMessage, "{\"", 2) == 0) {
+    return sendToFirebase("POST", url, logMessage);
+  } else {
+    DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 1);
+    JsonObject& jsonBufferRoot = jsonBuffer.createObject();
+    jsonBufferRoot["message"] = logMessage;
+    setCommonFields(&jsonBufferRoot);
+    return sendToFirebase("POST", url, &jsonBufferRoot);
+  }
 }
 
 char* Firebase::getDateStr(char* dateBuffer) {
@@ -170,8 +175,13 @@ int Firebase::sendToFirebase(const char* method, const char* url, const char* pa
 
 // Trying to send a message while processing an incoming request crashes the module
 // => handling a pile of messages that will be processed later, with retries.
+void Firebase::differMessage(JsonObject* jsonBufferRoot) {
+  differMessage(MESSAGE_LOG, jsonBufferRoot);
+}
+
 void Firebase::differMessage(MessageType type,  JsonObject* jsonBufferRoot) {
   String serialized = "";
+  setCommonFields(jsonBufferRoot);
   jsonBufferRoot->printTo(serialized);
   differMessage(type, serialized);
 }
@@ -179,6 +189,7 @@ void Firebase::differMessage(MessageType type,  JsonObject* jsonBufferRoot) {
 void Firebase::differMessage(String message) {
   differMessage(MESSAGE_LOG, message);
 }
+
 void Firebase::differMessage(MessageType type, String message) {
   Message **differedMessagePile = differedMessages;
   int count = 0;

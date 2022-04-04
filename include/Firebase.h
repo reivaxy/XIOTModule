@@ -41,7 +41,10 @@ public:
 
   void differMessage(String message);
   void differMessage(MessageType type, String message);
+
   void differMessage(MessageType type,  JsonObject* jsonBufferRoot);
+  void differMessage(JsonObject* jsonBufferRoot);
+  
   void differRecord(const char* type, JsonObject* jsonBuffer); 
   void handleDifferedMessages();
 
