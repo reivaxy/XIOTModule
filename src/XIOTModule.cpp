@@ -508,33 +508,8 @@ int XIOTModule::sendPushNotif(const char* title, const char* message) {
   root["title"] = title;
   root["message"] = message;
   root.printTo(body);
-  return sendToHttps("https://api.pushover.net/1/messages.json", body);
+  return XIOTHttps::sendToHttps("https://api.pushover.net/1/messages.json", body);
 }
-
-int XIOTModule::sendToHttps(const char* url, const char* payload) {
-  int httpCode = -1;
-  std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
-  client->setInsecure();
-  HTTPClient https;
-  if (https.begin(*client, url)) {
-    // start connection and send  headers
-    https.addHeader("Content-Type", "application/json");
-    httpCode = https.POST((const uint8_t *)payload, strlen(payload));
-    Debug("HTTP response code: %d\n", httpCode);
-    if (httpCode > 200) {
-      Debug(https.getString().c_str());
-    }
-    if (httpCode < 0) {
-      Debug(https.errorToString(httpCode).c_str());
-    }
-
-    https.end();
-  } else {
-    Debug("Connection failed");
-  }
-  return httpCode;
-}
-
 
 /**
  * Connects to the SSID read in config
@@ -1002,17 +977,6 @@ void XIOTModule::loop() {
   
   // Display needs to be refreshed continuously (for blinking, ...)
   _oledDisplay->refresh();    
-}
-
-char* XIOTModule::getDateStr(char* dateBuffer) {
-  int h = hour();
-  int mi = minute();
-  int s = second();
-  int d = day();
-  int mo = month();
-  int y= year();
-  sprintf(dateBuffer, "%04d/%02d/%02dT%02d:%02d:%02d", y, mo, d, h, mi, s);
-  return dateBuffer;
 }
 
 void XIOTModule::hideDateTime(bool flag) {

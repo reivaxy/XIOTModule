@@ -135,9 +135,7 @@ public:
 
   void processNtpEvent();
   bool isTimeInitialized();
-  int sendToHttps(const char* url, const char* payload);
   int sendPushNotif(const char* title, const char* message);
-  char *getDateStr(char *dateBuffer);
 
 
   Firebase* firebase = NULL;

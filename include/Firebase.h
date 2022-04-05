@@ -9,14 +9,12 @@
 
 #include <Arduino.h>
 #include <TimeLib.h>
-
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-
+#include <pgmspace.h>
 #include <ArduinoJson.h>
 #include <XIOTConfig.h>
 #include "XIOTMessages.h"
 #include "XIOTModuleDebug.h"
+#include "XIOTHttps.h"
 #include "Message.h"
 
 #define MAX_DIFFERED_MESSAGES_COUNT 20
@@ -40,6 +38,7 @@ public:
   int sendToFirebase(const char* method, const char* url, const char* payload);
 
   void differMessage(String message);
+  void differAlert(String message);
   void differMessage(MessageType type, String message);
 
   void differMessage(MessageType type,  JsonObject* jsonBufferRoot);

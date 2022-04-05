@@ -140,34 +140,8 @@ int Firebase::sendToFirebase(const char* method, const char* url, const char* pa
   } else {
     strcpy(urlWithSecret, url);
   }
-  int httpCode = -1;
-  WiFiClientSecure client;
-  client.setTimeout(3000);
-  client.setInsecure();
-  // use small buffers since payloads are small
-  // Otherwise it will use almost 30K of ram and sometimes crash :(
-  client.setBufferSizes(2048, 2048);  
-  HTTPClient https;
-  if (https.begin(client, urlWithSecret)) {
-    // start connection and send  headers
-    https.addHeader("Content-Type", "application/json");
-    if(strcmp(method, "POST") == 0) {
-      httpCode = https.POST((const uint8_t *)payload, strlen(payload));
-    } else {
-      httpCode = https.PUT((const uint8_t *)payload, strlen(payload));
-    }
-    Debug("HTTP response code: %d\n", httpCode);
-    if (httpCode > 200) {
-      Debug("%s\n", https.getString().c_str());
-    }
-    if (httpCode < 0) {
-      Debug("%s\n", https.errorToString(httpCode).c_str());
-    }
 
-    https.end();
-  } else {
-    Debug("Connection failed\n");
-  }
+  int httpCode = XIOTHttps::sendToHttps(urlWithSecret, payload);
   freeMem = system_get_free_heap_size();
   Debug("Heap after sending to Firebase: %d\n", freeMem); 
   return httpCode;
@@ -188,6 +162,10 @@ void Firebase::differMessage(MessageType type,  JsonObject* jsonBufferRoot) {
 
 void Firebase::differMessage(String message) {
   differMessage(MESSAGE_LOG, message);
+}
+
+void Firebase::differAlert(String message) {
+  differMessage(MESSAGE_ALERT, message);
 }
 
 void Firebase::differMessage(MessageType type, String message) {
