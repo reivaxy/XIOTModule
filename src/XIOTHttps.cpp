@@ -7,11 +7,11 @@
 
 #include "XIOTHttps.h"
 
-int XIOTHttps::sendToHttps(const char* url, const char* payload) {
-   return sendToHttps(url, payload, 2048, 3000);
+int XIOTHttps::sendToHttps(const char* method, const char* url, const char* payload) {
+   return sendToHttps(method, url, payload, 2048, 3000);
 }
 
-int XIOTHttps::sendToHttps(const char* url, const char* payload, int bufferSize, int timeout) {
+int XIOTHttps::sendToHttps(const char* method, const char* url, const char* payload, int bufferSize, int timeout) {
   int httpCode = -1;
   WiFiClientSecure client;
   client.setTimeout(timeout);
@@ -23,7 +23,11 @@ int XIOTHttps::sendToHttps(const char* url, const char* payload, int bufferSize,
   if (https.begin(client, url)) {
     // start connection and send  headers
     https.addHeader("Content-Type", "application/json");
-    httpCode = https.POST((const uint8_t *)payload, strlen(payload));
+    if (strncmp("POST", method, 4) == 0) {
+      httpCode = https.POST((const uint8_t *)payload, strlen(payload));
+    } else {
+      httpCode = https.PUT((const uint8_t *)payload, strlen(payload));
+    }
     Debug("HTTP response code: %d\n", httpCode);
     if (httpCode > 200) {
       Debug(https.getString().c_str());

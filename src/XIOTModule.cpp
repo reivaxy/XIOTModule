@@ -169,7 +169,7 @@ void XIOTModule::processNtpEvent() {
     #endif
     setCustomModuleRecordFields(&jsonBufferRoot);
    
-    firebase->differRecord("module", &jsonBufferRoot);
+    firebase->differRecord(MESSAGE_MODULE, &jsonBufferRoot);
         
   }
 }
@@ -508,7 +508,7 @@ int XIOTModule::sendPushNotif(const char* title, const char* message) {
   root["title"] = title;
   root["message"] = message;
   root.printTo(body);
-  return XIOTHttps::sendToHttps("https://api.pushover.net/1/messages.json", body);
+  return XIOTHttps::sendToHttps("POST", "https://api.pushover.net/1/messages.json", body);
 }
 
 /**

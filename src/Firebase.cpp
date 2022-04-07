@@ -72,12 +72,12 @@ void Firebase::setCommonFields(JsonObject* jsonBufferRoot) {
   jsonBufferRoot->set("heap_size", freeMem);
 }
 
-void Firebase::differRecord(const char* type, JsonObject* jsonBufferRoot) {
+void Firebase::differRecord(MessageType type, JsonObject* jsonBufferRoot) {
   Debug("Firebase::sendRecord\n");
   setCommonFields(jsonBufferRoot);
   String serialized = "";
   jsonBufferRoot->printTo(serialized);
-  differMessage(MESSAGE_MODULE, serialized);
+  differMessage(type, serialized);
 }
 
 int Firebase::sendEvent(const char* type, const char* logMessage) {
@@ -141,7 +141,7 @@ int Firebase::sendToFirebase(const char* method, const char* url, const char* pa
     strcpy(urlWithSecret, url);
   }
 
-  int httpCode = XIOTHttps::sendToHttps(urlWithSecret, payload);
+  int httpCode = XIOTHttps::sendToHttps(method, urlWithSecret, payload);
   freeMem = system_get_free_heap_size();
   Debug("Heap after sending to Firebase: %d\n", freeMem); 
   return httpCode;

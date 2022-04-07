@@ -44,7 +44,7 @@ public:
   void differMessage(MessageType type,  JsonObject* jsonBufferRoot);
   void differMessage(JsonObject* jsonBufferRoot);
   
-  void differRecord(const char* type, JsonObject* jsonBuffer); 
+  void differRecord(MessageType type, JsonObject* jsonBuffer); 
   void handleDifferedMessages();
 
   ModuleConfigClass* config;
