@@ -872,7 +872,7 @@ void XIOTModule::_wifiDisplay() {
 
   if (_config->getIsAutonomous()) {
     // Display IP on AP SSID 
-    sprintf(message, "AP %s: %s", _config->getXiotSsid(), WiFi.softAPIP().toString().c_str());
+    sprintf(message, "%s (%s)", WiFi.softAPIP().toString().c_str(), _config->getXiotSsid());
   } else {
     sprintf(message, "Connecting to %s", _config->getXiotSsid());
   }
