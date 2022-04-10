@@ -28,6 +28,7 @@ a{right:40px;position:absolute;text-decoration:none}\
   " MSG_INIT_AP_PWD " <br/><input name='xiotPwd' type='text' maxlength=50/><br/>\
   " MSG_INIT_HOME_SSID " <br/><input name='boxSsid' type='text' maxlength=20/><br/>\
   " MSG_INIT_HOME_PWD " <br/><input name='boxPwd' type='text' maxlength=50><br/>\ 
+  " MSG_INIT_BRIGHTNESS " <br/><input name='brightness' type='number' min=1 max=255 size=4/></br>\
   " MSG_INIT_TIME_OFFSET " <br/><input name='timeOffset' type='number' value='%d'><br/>\ 
   " MSG_INIT_FIREBASE_URL " <br/><input name='firebaseUrl' type='text' maxlength=150/><br/>\
   " MSG_INIT_FIREBASE_SECRET " <br/><input name='firebaseSecret' type='text' maxlength=49/><br/>\

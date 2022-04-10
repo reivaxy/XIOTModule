@@ -13,6 +13,7 @@
 #define MSG_INIT_HOME_SSID "Home Wifi SSID"
 #define MSG_INIT_HOME_PWD "Home Wifi Password"
 #define MSG_INIT_NTP_HOST "Time server NTP Host"
+#define MSG_INIT_BRIGHTNESS "Screen brightness"
 #define MSG_INIT_WEBSITE "Web site URL"
 #define MSG_INIT_API_KEY "Api Key from Web site registration"
 #define MSG_INIT_AUTONOMOUS "Autonomous module"

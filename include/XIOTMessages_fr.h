@@ -13,6 +13,7 @@
 #define MSG_INIT_HOME_SSID "Nom Wifi box"
 #define MSG_INIT_HOME_PWD "Mot de passe Wifi box"
 #define MSG_INIT_NTP_HOST "Serveur NTP"
+#define MSG_INIT_BRIGHTNESS "Luminosité écran"
 #define MSG_INIT_WEBSITE "URL du site web"
 #define MSG_INIT_API_KEY "API key pour le site web"
 #define MSG_INIT_AUTONOMOUS "Module autonome"

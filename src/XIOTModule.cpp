@@ -398,12 +398,22 @@ void XIOTModule::addModuleEndpoints() {
         _config->setBoxSsid(boxSsid.c_str());
       }
     }
+
     String timeOffset = _server->arg("timeOffset");
     _config->setGmtOffset((int16_t)timeOffset.toInt());
     int offset = _config->getGmtMinOffset(); // minutes
     int hours = offset / 60;
     int minutes = offset - (hours * 60);
     NTP.setTimeZone(hours, minutes);
+    
+    String brightness = _server->arg("brightness");
+    if (brightness.length() > 0) {
+      uint8 level = (uint8_t)brightness.toInt();
+      Debug("Setting brightness to %d\n", level);
+      _config->setBrightness(level);
+      _oledDisplay->getDisplay()->setBrightness(level);
+    }
+
 
 
     customSaveConfig();
@@ -891,7 +901,8 @@ void XIOTModule::_wifiDisplay() {
 
 void XIOTModule::sendHtml(const char* html, int code) {
   _server->sendHeader("Connection", "close");
-  _server->send(code, "text/html", html);
+  // _server->sendHeader("Content-Type", "text/html; charset=utf-8");
+  _server->send(code, "text/html; charset=utf-8", html);
 }
 
 void XIOTModule::sendJson(const char* jsonText, int code) {
