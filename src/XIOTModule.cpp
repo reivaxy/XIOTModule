@@ -164,6 +164,7 @@ void XIOTModule::processNtpEvent() {
     }
     jsonBufferRoot["lang"] = XIOT_LANG;
     jsonBufferRoot["type"] = _config->getType();
+    jsonBufferRoot["ip"] = _localIP;
     #ifdef GIT_REV
     jsonBufferRoot["version"] = GIT_REV;
     #endif
