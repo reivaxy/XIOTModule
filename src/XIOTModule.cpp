@@ -74,7 +74,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
 
   // Nb: & allows to keep the reference to the caller object in the lambda block
   _wifiSTAGotIpHandler = WiFi.onStationModeGotIP([&](WiFiEventStationModeGotIP ipInfo) {
-    firebase->differMessage("Connected to wifi");
+    firebase->differMessage(MSG_LOG_CONNECTED);
     strcpy(_localIP, ipInfo.ip.toString().c_str());
     if(isWaitingOTA()) {
       waitForOta();
@@ -418,7 +418,7 @@ void XIOTModule::addModuleEndpoints() {
 
 
     customSaveConfig();
-    firebase->differMessage(MESSAGE_LOG, "Configuration updated");
+    firebase->differMessage(MESSAGE_LOG, MSG_LOG_CONFIG_UPDATED);
     _config->saveToEeprom();
     sendHtml("Config saved", httpCode);
 
@@ -1018,7 +1018,7 @@ bool XIOTModule::customBeforeOTA() {
 
 char* XIOTModule::customFormInitPage() {
   // Override this method to implement custom fields to be displayed in config form
-  // result needs to be freed by caller
+  // result will be freed by caller
   char* result = (char*)malloc(1);
   *result = 0;
   return result;

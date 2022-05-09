@@ -26,4 +26,6 @@
 #define MSG_INIT_FIREBASE_SECRET "Clef secrète de Firebase"
 #define MSG_INIT_CONFIRM "Confirm Upgrade Firmware ?"
 
+#define MSG_LOG_CONNECTED "Connecté au wifi"
+#define MSG_LOG_CONFIG_UPDATED "Configuration mise à jour"
 
