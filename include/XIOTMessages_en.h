@@ -26,3 +26,6 @@
 #define MSG_INIT_FIREBASE_SECRET "Firebase Secret Token"
 #define MSG_INIT_CONFIRM "Confirmez Upgrade Firmware ?"
 
+#define MSG_LOG_CONNECTED "Connected to wifi"
+#define MSG_LOG_CONFIG_UPDATED "Configuration updated"
+

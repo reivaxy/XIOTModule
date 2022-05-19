@@ -49,8 +49,10 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
   _config = config;
   firebase = new Firebase(config);
-  Serial.print("Initializing module ");
+  Serial.print("Initializing module: ");
   Serial.println(config->getName());
+  Serial.print("Module type: ");
+  Serial.println(config->getType());
   #ifdef GIT_REV
   Serial.printf("Version %s\n", GIT_REV);
   #endif  
@@ -74,8 +76,8 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
 
   // Nb: & allows to keep the reference to the caller object in the lambda block
   _wifiSTAGotIpHandler = WiFi.onStationModeGotIP([&](WiFiEventStationModeGotIP ipInfo) {
-    firebase->differMessage("Connected to wifi");
     strcpy(_localIP, ipInfo.ip.toString().c_str());
+    firebase->differMessage(MSG_LOG_CONNECTED);
     if(isWaitingOTA()) {
       waitForOta();
     } else {
@@ -164,6 +166,7 @@ void XIOTModule::processNtpEvent() {
     }
     jsonBufferRoot["lang"] = XIOT_LANG;
     jsonBufferRoot["type"] = _config->getType();
+    jsonBufferRoot["ip"] = _localIP;
     #ifdef GIT_REV
     jsonBufferRoot["version"] = GIT_REV;
     #endif
@@ -310,7 +313,9 @@ void XIOTModule::addModuleEndpoints() {
     char *customPage = customPageInitPage();
     // Beware, update if some for values are added to the page.
     String pageTemplate(FPSTR(moduleInitPage));
-    char *page = (char*)malloc(strlen(pageTemplate.c_str()) + strlen(_config->getName())+ strlen("checked") + strlen(customForm) + strlen(customPage) + 50); 
+    int maxSize = strlen(pageTemplate.c_str()) + strlen(_config->getName())+ strlen("checked") + strlen(customForm) + strlen(customPage) + 50;
+    Serial.printf("Size %d\n", maxSize);
+    char *page = (char*)malloc(maxSize); 
     sprintf(page, pageTemplate.c_str(), _config->getName(), _config->getName(),
                                   _config->getIsAutonomous()? "checked":"",
                                   _config->getGmtMinOffset(),
@@ -417,7 +422,7 @@ void XIOTModule::addModuleEndpoints() {
 
 
     customSaveConfig();
-    firebase->differMessage(MESSAGE_LOG, "Configuration updated");
+    firebase->differMessage(MESSAGE_LOG, MSG_LOG_CONFIG_UPDATED);
     _config->saveToEeprom();
     sendHtml("Config saved", httpCode);
 
@@ -427,6 +432,10 @@ void XIOTModule::addModuleEndpoints() {
 
   _server->begin();
 }    
+
+void XIOTModule::setStackStart(char** stackStart) {
+  XIOTModuleDebug::stackStart = stackStart;  
+}
 
 // This is responding to api/ping and api/data (for GET symmetry with put/post on api/data)
 // This is also when refreshing data: not responding to a request but posting to master.
@@ -638,9 +647,9 @@ char* XIOTModule::_buildFullPayload() {
   if(globalStatus) {  
     root[XIOTModuleJsonTag::globalStatus] = globalStatus;
   }
-  uint32_t freeMem = system_get_free_heap_size();
-  Serial.printf("Free heap mem: %d\n", freeMem);
-  root[XIOTModuleJsonTag::heap] = freeMem;
+
+  MemSize("");
+  root[XIOTModuleJsonTag::heap] = ESP.getFreeHeap();
 
   // When implemented: return true if module uses sleep feature (battery)
   // So that master won't ping
@@ -1017,7 +1026,7 @@ bool XIOTModule::customBeforeOTA() {
 
 char* XIOTModule::customFormInitPage() {
   // Override this method to implement custom fields to be displayed in config form
-  // result needs to be freed by caller
+  // result will be freed by caller
   char* result = (char*)malloc(1);
   *result = 0;
   return result;

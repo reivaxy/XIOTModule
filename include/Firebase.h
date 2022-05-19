@@ -37,9 +37,9 @@ public:
   int sendToFirebase(const char* method, const char* url, JsonObject* jsonBufferRoot);
   int sendToFirebase(const char* method, const char* url, const char* payload);
 
-  void differMessage(String message);
-  void differAlert(String message);
-  void differMessage(MessageType type, String message);
+  void differMessage(const char* message);
+  void differAlert(const char* message);
+  void differMessage(MessageType type, const char* message);
 
   void differMessage(MessageType type,  JsonObject* jsonBufferRoot);
   void differMessage(JsonObject* jsonBufferRoot);

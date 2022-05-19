@@ -7,6 +7,12 @@
 
  #include "XIOTMessages.h"
 
+#ifndef GIT_REV
+  #define GIT_REVISION "unknown"
+#else 
+  #define GIT_REVISION GIT_REV
+#endif
+
 static const char moduleInitPage[] PROGMEM = "\
 <html title='Agent init page'>\
 <head>\
@@ -41,7 +47,9 @@ a{right:40px;position:absolute;text-decoration:none}\
   %s\
   <input type='submit'/>\
 </form>\
-<br/><br/><br/><form onsubmit=\"return confirm('" MSG_INIT_CONFIRM "');\" action='/api/ota' method=POST><input class='red' type='submit' value='Upgrade Firmware'/></form>\
+<br/><br/><br/>\
+<div>Version: " GIT_REVISION " </div>\
+<form onsubmit=\"return confirm('" MSG_INIT_CONFIRM "');\" action='/api/ota' method=POST><input class='red' type='submit' value='Upgrade Firmware'/></form>\
 %s\
 </body>\
 </html>\
