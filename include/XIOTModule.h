@@ -6,6 +6,7 @@
 
 #pragma once
 
+
 #include "XIOTModuleDebug.h"
 #include <XIOTConfig.h>
 #include <WString.h>
@@ -23,10 +24,6 @@
 #include <NtpClientLib.h>
 #include "Firebase.h"
 
-
-extern "C" {
-  #include "user_interface.h"  // Allow getting heap size
-}
 
 // Max length authorized for modules custom data
 #define MAX_GLOBAL_STATUS_SIZE 30
@@ -132,7 +129,7 @@ public:
   char* _buildFullPayload();
   void _initDisplay(int displayAddr, int displaySda, int displayScl, bool flipScreen = true, uint8_t brightness = 100);
   void _processSMS();
-
+  void setStackStart(char** stackStart);
   void processNtpEvent();
   bool isTimeInitialized();
   int sendPushNotif(const char* title, const char* message);

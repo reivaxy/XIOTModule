@@ -6,14 +6,24 @@
 
 #include  "Message.h"
 
-Message::Message(MessageType type, String message) {
+Message::Message(MessageType type, const char* message) {
    this->type = type;
-   this->message = message;
+   this->message = XUtils::mallocAndCopy(message);
+   this->id = NULL;
+   this->customType = NULL;
+
 }
 
-Message::Message(const char* customType, String id, String message) {
+Message::Message(const char* customType, const char* id, const char* message) {
    this->type = id == NULL ? MESSAGE_CUSTOM : RECORD_CUSTOM ; // is this an event or a record. events have self generated ids, records don't
-   this->id = id;
-   this->customType = customType;
-   this->message = message;
+   this->id = XUtils::mallocAndCopy(id);
+   this->customType = XUtils::mallocAndCopy(customType);
+   this->message = XUtils::mallocAndCopy(message);
+}
+
+Message::~Message() {
+   free(this->id);
+   free(this->customType);
+   free(this->message);
+
 }
