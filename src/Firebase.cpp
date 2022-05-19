@@ -157,13 +157,13 @@ void Firebase::differMessage(JsonObject* jsonBufferRoot) {
 void Firebase::differMessage(MessageType type,  JsonObject* jsonBufferRoot) {
   Debug("Firebase::differMessage MessageType, JsonObject*\n");
   setCommonFields(jsonBufferRoot);
-  int size = jsonBufferRoot->measureLength(); // to investigate: measureLength is too short by one on some messages
+  int size = jsonBufferRoot->measureLength();
   Debug("Firebase json buffer required size %d\n", size);
   size += 3;
   char* serialized = (char *)malloc(size);
   jsonBufferRoot->printTo(serialized, size);
   Debug("Firebase json buffer used size %d\n", strlen(serialized));
-  Debug("Firebase::differMessage payload %s\n", serialized);
+  //Debug("Firebase::differMessage payload %s\n", serialized);
   differMessage(type, serialized);
   free(serialized);
 }
