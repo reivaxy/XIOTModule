@@ -8,7 +8,7 @@
 #include "XIOTModuleDebug.h"
 #include <Arduino.h>
 
-char **XIOTModuleDebug::stackStart = NULL;
+char *XIOTModuleDebug::stackStart = NULL;
 
 XIOTModuleDebug::XIOTModuleDebug() {}
 

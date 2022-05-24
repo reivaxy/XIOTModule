@@ -8,20 +8,22 @@
 #include "XIOTHttps.h"
 
 int XIOTHttps::sendToHttps(const char* method, const char* url, const char* payload) {
-   return sendToHttps(method, url, payload, 2048, 5000);
+   return sendToHttps(method, url, payload, 1024, 15000);
 }
 
 int XIOTHttps::sendToHttps(const char* method, const char* url, const char* payload, int bufferSize, int timeout) {
-  MemSize("before sending https request");
+  MemSize("XIOTHttps::sendToHttps");
   int httpCode = -1;
   WiFiClientSecure client;
   client.setInsecure();
   client.setTimeout(timeout);
+  Debug("XIOTHttps::sendToHttps payload size %d\n", strlen(payload));
   // use small buffers since payloads are small
   // Otherwise it will use almost 30K of ram and sometimes crash :(
   client.setBufferSizes(bufferSize, bufferSize);  
   HTTPClient https;
   if (https.begin(client, url)) {
+    yield(); // attempt to lower WDT risk ? lol
     // start connection and send  headers
     https.addHeader("Content-Type", "application/json");
     if (strncmp("POST", method, 4) == 0) {

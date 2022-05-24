@@ -8,9 +8,8 @@
 #include <exception>
 
 
-#define COMMON_FIELD_COUNT 5
+#define COMMON_FIELD_COUNT 6
 #define PING_PERIOD 1000 * 60 * 5UL // 5mn
-#define DATE_BUFFER_SIZE 25
 
 #define URL_MAX_LENGTH_WITHOUT_SECRET 100
 
@@ -33,6 +32,10 @@ void Firebase::init(const char* macAddrStr) {
   }
 }
 
+size_t Firebase::getBufferSize(int fieldCount) {
+  return JSON_OBJECT_SIZE(COMMON_FIELD_COUNT + fieldCount);
+}
+
 void Firebase::disable() {
   Debug("Firebase::disable\n");
   initialized = false;
@@ -43,11 +46,12 @@ void Firebase::loop() {
     return ;
   }
 
+  handleDifferedMessages();
+
   // send a ping every PING_PERIOD
   unsigned long timeNow = now() * 1000; // don't use millis, it's 0 when starting :)
   if (config->getSendFirebasePing() && XUtils::isElapsedDelay(timeNow, &lastSendPing, PING_PERIOD)) {
-    Serial.println("Sending ping");
-    DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 5);
+    DynamicJsonBuffer jsonBuffer(getBufferSize(5));
     JsonObject& jsonBufferRoot = jsonBuffer.createObject();
     // Let's flag the first ping after boot
     if (sendInitPing) {
@@ -61,7 +65,6 @@ void Firebase::loop() {
     differMessage(MESSAGE_PING, &jsonBufferRoot);
   }
 
-  handleDifferedMessages();
 }
 
 void Firebase::setCommonFields(JsonObject* jsonBufferRoot) {
@@ -70,17 +73,21 @@ void Firebase::setCommonFields(JsonObject* jsonBufferRoot) {
   jsonBufferRoot->set("lang", XIOT_LANG);
   jsonBufferRoot->set("name", config->getName());
   jsonBufferRoot->set("mac", macAddrStr);
-  char date[DATE_BUFFER_SIZE];
-  jsonBufferRoot->set("date", getDateStr(date));
+  jsonBufferRoot->set("date", getDateStr());
   jsonBufferRoot->set("heap_size", ESP.getFreeHeap());
+  jsonBufferRoot->set("heap_max_block_size", ESP.getMaxFreeBlockSize());
 }
 
 void Firebase::differRecord(MessageType type, JsonObject* jsonBufferRoot) {
   Debug("Firebase::differRecord\n");
   setCommonFields(jsonBufferRoot);
-  String serialized = "";
-  jsonBufferRoot->printTo(serialized);
-  differMessage(type, serialized.c_str());
+  int size = jsonBufferRoot->measureLength();
+  Debug("Firebase json buffer required size %d\n", size);
+  size += 1;
+  char* serialized = (char *)malloc(size);
+  jsonBufferRoot->printTo(serialized, size);
+  differMessage(type, serialized);
+  free(serialized);
 }
 
 int Firebase::sendEvent(const char* type, const char* logMessage) {
@@ -92,7 +99,7 @@ int Firebase::sendEvent(const char* type, const char* logMessage) {
   if (strncmp(logMessage, "{\"", 2) == 0) {
     return sendToFirebase("POST", url, logMessage);
   } else {
-    DynamicJsonBuffer jsonBuffer(COMMON_FIELD_COUNT + 1);
+    DynamicJsonBuffer jsonBuffer(getBufferSize(1));
     JsonObject& jsonBufferRoot = jsonBuffer.createObject();
     jsonBufferRoot["message"] = logMessage;
     setCommonFields(&jsonBufferRoot);
@@ -100,23 +107,26 @@ int Firebase::sendEvent(const char* type, const char* logMessage) {
   }
 }
 
-char* Firebase::getDateStr(char* dateBuffer) {
+char* Firebase::getDateStr() {
   int h = hour();
   int mi = minute();
   int s = second();
   int d = day();
   int mo = month();
   int y= year();
-  sprintf(dateBuffer, "%04d/%02d/%02dT%02d:%02d:%02d", y, mo, d, h, mi, s);
-  return dateBuffer;
+  sprintf(date, "%04d/%02d/%02dT%02d:%02d:%02d", y, mo, d, h, mi, s);
+  return date;
 }
 
 int Firebase::sendToFirebase(const char* method, const char* url, JsonObject* jsonBufferRoot) {
   Debug("Firebase::sendToFirebase char* char* JsonObject*\n");
-  String serialized = "";
-  jsonBufferRoot->printTo(serialized); 
-  jsonBufferRoot = NULL;
-  int result = sendToFirebase(method, url, serialized.c_str());
+  int size = jsonBufferRoot->measureLength();
+  Debug("Firebase json buffer required size %d\n", size);
+  size += 1;
+  char* serialized = (char *)malloc(size);
+  jsonBufferRoot->printTo(serialized, size); 
+  int result = sendToFirebase(method, url, serialized);
+  free(serialized);
   return result;
 }
 
@@ -149,8 +159,8 @@ int Firebase::sendToFirebase(const char* method, const char* url, const char* pa
 
 // Trying to send a message while processing an incoming request crashes the module
 // => handling a pile of messages that will be processed later, with retries.
-void Firebase::differMessage(JsonObject* jsonBufferRoot) {
-  Debug("Firebase::differMessage JsonObject*\n");
+void Firebase::differLog(JsonObject* jsonBufferRoot) {
+  Debug("Firebase::differLog JsonObject*\n");
   differMessage(MESSAGE_LOG, jsonBufferRoot);
 }
 
@@ -159,7 +169,7 @@ void Firebase::differMessage(MessageType type,  JsonObject* jsonBufferRoot) {
   setCommonFields(jsonBufferRoot);
   int size = jsonBufferRoot->measureLength();
   Debug("Firebase json buffer required size %d\n", size);
-  size += 3;
+  size += 1;
   char* serialized = (char *)malloc(size);
   jsonBufferRoot->printTo(serialized, size);
   Debug("Firebase json buffer used size %d\n", strlen(serialized));
@@ -168,7 +178,7 @@ void Firebase::differMessage(MessageType type,  JsonObject* jsonBufferRoot) {
   free(serialized);
 }
 
-void Firebase::differMessage(const char* message) {
+void Firebase::differLog(const char* message) {
   Debug("Firebase::differMessage const char*\n");
   differMessage(MESSAGE_LOG, message);
 }

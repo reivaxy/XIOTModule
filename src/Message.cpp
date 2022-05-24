@@ -15,7 +15,7 @@ Message::Message(MessageType type, const char* message) {
 }
 
 Message::Message(const char* customType, const char* id, const char* message) {
-   this->type = id == NULL ? MESSAGE_CUSTOM : RECORD_CUSTOM ; // is this an event or a record. events have self generated ids, records don't
+   this->type = id == NULL ? MESSAGE_CUSTOM : RECORD_CUSTOM ; // is this an event or a record. events have self generated ids, records provide their id
    this->id = XUtils::mallocAndCopy(id);
    this->customType = XUtils::mallocAndCopy(customType);
    this->message = XUtils::mallocAndCopy(message);

@@ -77,7 +77,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   // Nb: & allows to keep the reference to the caller object in the lambda block
   _wifiSTAGotIpHandler = WiFi.onStationModeGotIP([&](WiFiEventStationModeGotIP ipInfo) {
     strcpy(_localIP, ipInfo.ip.toString().c_str());
-    firebase->differMessage(MSG_LOG_CONNECTED);
+    firebase->differLog(MSG_LOG_CONNECTED);
     if(isWaitingOTA()) {
       waitForOta();
     } else {
@@ -100,6 +100,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
           NTP.setTimeZone(hours, minutes);
         } else {
           firebase->init(macAddrStr);
+          sendModuleInfo();  // local ip address may have changed
         }
 
       } else if(strcmp(DEFAULT_XIOT_APPWD, _config->getXiotPwd()) != 0) {
@@ -154,7 +155,12 @@ void XIOTModule::processNtpEvent() {
     _timeDisplay();
     NTP.setInterval(6 * 3600, 6 * 3600);  // 6h retry, 6h refresh. once we have time, refresh failure is not critical
     firebase->init(macAddrStr);
-    DynamicJsonBuffer jsonBuffer(8);
+    sendModuleInfo();   
+  }
+}
+
+void XIOTModule::sendModuleInfo() {
+    DynamicJsonBuffer jsonBuffer(firebase->getBufferSize(6));
     JsonObject& jsonBufferRoot = jsonBuffer.createObject();
     const char* tu = _config->getPushoverUser();
     const char* ta = _config->getPushoverToken();
@@ -173,8 +179,6 @@ void XIOTModule::processNtpEvent() {
     setCustomModuleRecordFields(&jsonBufferRoot);
    
     firebase->differRecord(MESSAGE_MODULE, &jsonBufferRoot);
-        
-  }
 }
 
 bool XIOTModule::isTimeInitialized() {
@@ -309,27 +313,30 @@ void XIOTModule::addModuleEndpoints() {
 
   // Display config page.    
   _server->on("/config", HTTP_GET, [&]() {
+    MemSize("starting displaying config page");
     char *customForm = customFormInitPage();
     char *customPage = customPageInitPage();
     // Beware, update if some for values are added to the page.
-    String pageTemplate(FPSTR(moduleInitPage));
-    int maxSize = strlen(pageTemplate.c_str()) + strlen(_config->getName())+ strlen("checked") + strlen(customForm) + strlen(customPage) + 50;
-    Serial.printf("Size %d\n", maxSize);
+    int maxSize = strlen_P(moduleInitPage) + strlen(_config->getName())+ strlen("checked") + strlen(customForm) + strlen(customPage) + 50;
+    Debug("Config page reserved size %d\n", maxSize);
     char *page = (char*)malloc(maxSize); 
-    sprintf(page, pageTemplate.c_str(), _config->getName(), _config->getName(),
+    sprintf_P(page, moduleInitPage, _config->getName(), _config->getName(),
                                   _config->getIsAutonomous()? "checked":"",
                                   _config->getGmtMinOffset(),
                                   _config->getSendFirebasePing()? "checked":"",
                                   customForm,
                                   customPage);
 
+    Debug("Config page used size %d\n", strlen(page));
     sendHtml(page, 200);
     free(page);
     free(customForm);
     free(customPage);
+    MemSize("ending displaying config page");
   });
 
   _server->on("/api/saveConfig", HTTP_POST, [&]() {
+    MemSize("starting save config");
     int httpCode = 200;
 
     // Should module be autonomous ?
@@ -419,13 +426,12 @@ void XIOTModule::addModuleEndpoints() {
       _oledDisplay->getDisplay()->setBrightness(level);
     }
 
-
-
     customSaveConfig();
     firebase->differMessage(MESSAGE_LOG, MSG_LOG_CONFIG_UPDATED);
     _config->saveToEeprom();
     sendHtml("Config saved", httpCode);
 
+    MemSize("endinging save config");
     delay(1000);
   });
 
@@ -433,7 +439,7 @@ void XIOTModule::addModuleEndpoints() {
   _server->begin();
 }    
 
-void XIOTModule::setStackStart(char** stackStart) {
+void XIOTModule::setStackStart(char* stackStart) {
   XIOTModuleDebug::stackStart = stackStart;  
 }
 

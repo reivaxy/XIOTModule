@@ -129,11 +129,11 @@ public:
   char* _buildFullPayload();
   void _initDisplay(int displayAddr, int displaySda, int displayScl, bool flipScreen = true, uint8_t brightness = 100);
   void _processSMS();
-  void setStackStart(char** stackStart);
+  void setStackStart(char* stackStart);
   void processNtpEvent();
   bool isTimeInitialized();
   int sendPushNotif(const char* title, const char* message);
-
+  void sendModuleInfo();
 
   Firebase* firebase = NULL;
 

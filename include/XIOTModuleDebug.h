@@ -11,8 +11,8 @@
 #endif
 
 #ifdef DEBUG_XIOTMODULE_MEM
-#define StackSize(msg) { if (XIOTModuleDebug::stackStart != NULL) {char *here; Serial.printf("Stack Size %s at %s in %s (%d): %d\n", msg, __PRETTY_FUNCTION__,  __FILE__, __LINE__, XIOTModuleDebug::stackStart - &here);} }
-#define HeapSize(msg) { Serial.printf("Free Heap %s at %s in %s (%d): %d\n", msg,  __PRETTY_FUNCTION__,  __FILE__, __LINE__, ESP.getFreeHeap());} 
+#define StackSize(msg) { if (XIOTModuleDebug::stackStart != NULL) {char here; Serial.printf("Stack Size %s at %s in %s (%d): %d\n", msg, __PRETTY_FUNCTION__,  __FILE__, __LINE__, XIOTModuleDebug::stackStart - &here);} }
+#define HeapSize(msg) { Serial.printf("Free Heap %s at %s in %s (%d): %d (largest block %d)\n", msg,  __PRETTY_FUNCTION__,  __FILE__, __LINE__, ESP.getFreeHeap(), ESP.getMaxFreeBlockSize());} 
 #define MemSize(msg) { StackSize(msg); HeapSize(msg);} 
 #else
 #define StackSize(...)
@@ -24,7 +24,7 @@
 #ifndef XIOTModuleDebugClassDefined
 class XIOTModuleDebug {
 public:
-  static char** stackStart;
+  static char* stackStart;
 private:
    XIOTModuleDebug();
 };
