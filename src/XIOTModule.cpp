@@ -277,7 +277,7 @@ void XIOTModule::addModuleEndpoints() {
     } else {
       sendHtml("restarting", 200);
       delay(300);
-      ESP.restart();     
+      ESP.reset();     
     }
   });
   

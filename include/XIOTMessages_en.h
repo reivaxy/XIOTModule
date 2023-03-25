@@ -24,7 +24,9 @@
 #define MSG_INFO_PO_TOKEN "(set 'none' for no notif)"
 #define MSG_INIT_FIREBASE_URL "Firebase URL"
 #define MSG_INIT_FIREBASE_SECRET "Firebase Secret Token"
-#define MSG_INIT_CONFIRM "Confirmez Upgrade Firmware ?"
+#define MSG_INIT_CONFIRM "Confirm Upgrade Firmware ?"
+#define MSG_INIT_RESTART_CONFIRM "Confirm Restart ?"
+
 
 #define MSG_LOG_CONNECTED "Connected to wifi"
 #define MSG_LOG_CONFIG_UPDATED "Configuration updated"

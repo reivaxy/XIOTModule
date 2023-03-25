@@ -11,7 +11,7 @@
 #define COMMON_FIELD_COUNT 6
 #define PING_PERIOD 1000 * 60 * 5UL // 5mn
 
-#define URL_MAX_LENGTH_WITHOUT_SECRET 100
+#define URL_MAX_LENGTH_WITHOUT_SECRET 200
 
 Firebase::Firebase(ModuleConfigClass* config) {
   this->config = config;
@@ -125,6 +125,7 @@ int Firebase::sendToFirebase(const char* method, const char* url, JsonObject* js
   size += 1;
   char* serialized = (char *)malloc(size);
   jsonBufferRoot->printTo(serialized, size); 
+  Debug("Firebase json buffer used size %d\n", strlen(serialized));
   int result = sendToFirebase(method, url, serialized);
   free(serialized);
   return result;
@@ -157,7 +158,7 @@ int Firebase::sendToFirebase(const char* method, const char* url, const char* pa
   return httpCode;
 }
 
-// Trying to send a message while processing an incoming request crashes the module
+// Trying to send a message while processing an incoming request is suspected to crash the module
 // => handling a pile of messages that will be processed later, with retries.
 void Firebase::differLog(JsonObject* jsonBufferRoot) {
   Debug("Firebase::differLog JsonObject*\n");
@@ -194,6 +195,10 @@ void Firebase::differMessage(MessageType type, const char* message) {
   int count = 0;
   while (count < MAX_DIFFERED_MESSAGES_COUNT) {
     if (*differedMessagePile == NULL) {
+      // Do not keep ping messages if not connected of message queue has more than 2 messages
+      if ((type == MESSAGE_PING) && (!initialized || (count > 2))) {
+        return;
+      }
       *differedMessagePile = new Message(type, message);
       Debug("Message added at position %d\n", count);
       break;
@@ -246,7 +251,8 @@ void Firebase::handleDifferedMessages() {
       Serial.println("Message type not supported yet\n");
   }
   boolean deleteMessage = false;
-  if (httpCode != 200) {
+  // in case of failure, do not keep ping message in the queue: all other messages are more important.
+  if ((httpCode != 200) && (differedMessages[0]->type != MESSAGE_PING)) {
     if (differedMessages[0]->retryCount >= MAX_RETRY_MESSAGE_COUNT) {
       Debug("Differed message not sent, but already retried %d times: deleting\n", MAX_RETRY_MESSAGE_COUNT);
       deleteMessage = true;

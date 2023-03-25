@@ -17,5 +17,6 @@ class XIOTHttps {
 
    static int sendToHttps(const char* method, const char* url, const char* payload);
    static int sendToHttps(const char* method, const char* url, const char* payload, int bufferSize, int timeout);
+   static void yield();
 
 };

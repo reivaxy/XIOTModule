@@ -47,7 +47,9 @@ a{right:40px;position:absolute;text-decoration:none}\
   %s\
   <input type='submit'/>\
 </form>\
-<br/><br/><br/>\
+<br/><br/>\
+<form onsubmit=\"return confirm('" MSG_INIT_RESTART_CONFIRM "');\" action='/api/restart' method=GET><input class='red' type='submit' value='Restart'/></form>\
+<br/><br/>\
 <div>Version: " GIT_REVISION " </div>\
 <form onsubmit=\"return confirm('" MSG_INIT_CONFIRM "');\" action='/api/ota' method=POST><input class='red' type='submit' value='Upgrade Firmware'/></form>\
 %s\

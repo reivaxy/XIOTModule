@@ -8,6 +8,12 @@
 #include "XIOTHttps.h"
 #include <XUtils.h>
 
+
+#define RESPONSE_READ_YIELD_PERIOD_MS 1000
+#define RESPONSE_READ_TIMEOUT_MS 6000
+#define READ_BUFFER_SIZE 300
+
+
 int XIOTHttps::sendToHttps(const char* method, const char* url, const char* payload) {
    return sendToHttps(method, url, payload, 2048, 3000);
 }
@@ -28,21 +34,21 @@ int XIOTHttps::sendToHttps(const char* method, const char* url, const char* payl
   char *firstPathSlash = strchr(urlCopy + 9, '/');
   *firstPathSlash = 0;
   char *host = urlCopy + 8;
-
+  //Debug("%s on host %s\n", method, host);
   // Serial.printf("Url: %s\n", url);
   // Serial.printf("Host: %s\n", host);
-
+  //delay(0);
   if (!client.connect(host, 443)) {
     Serial.println("Connection failed!");
   } else {
+    Serial.println("Connected!");
     client.printf("%s %s HTTP/1.1\n", method, url);
     client.printf("Host: %s\n", host);
-    client.println("Connection: close");
     client.println("Content-Type: application/json");
     client.printf("Content-Length: %d\n", strlen(payload));
+    client.println("Connection: close");
     client.println();  
     client.println(payload);
-
     // read output
     // First line is result:
     // HTTP/1.1 401 Unauthorized
@@ -50,26 +56,50 @@ int XIOTHttps::sendToHttps(const char* method, const char* url, const char* payl
     // Next lines are response headers until empty line
     Debug("Response:\n");
     bool firstLine = true;
+    bool readTimeout = false;
+    unsigned long startReadingResponse = millis();
+    unsigned long sinceLastYield = startReadingResponse;
 
-    // TODO: handle timeout ?
+    char line[READ_BUFFER_SIZE + 1];
+ 
     while (client.connected()) {
-      String line = client.readStringUntil('\n');
+      size_t readCount = client.readBytesUntil('\n', line, READ_BUFFER_SIZE);
+      line[readCount] = 0;
       if (firstLine) {
-        httpCode = line.substring(9, 12).toInt();
+        Debug("%s\n", line);
+        char *code = line+9;
+        code[3] = 0;
+        httpCode = atoi(code);
+        Debug("Http code: %d\n", httpCode);
         firstLine = false;
       }
-      Debug("%s\n", line.c_str());
-      if (line == "\r") {
+      if (strcmp(line,"\r")) {
         break;
       }
+
+      if (XUtils::isElapsedDelay(millis(), &startReadingResponse, RESPONSE_READ_TIMEOUT_MS)) {
+        Debug("Timeout while reading response headers\n");
+        readTimeout = true;
+        break;
+      }
+      // if (XUtils::isElapsedDelay(millis(), &sinceLastYield, RESPONSE_READ_YIELD_PERIOD_MS)) {
+      //   yield();
+      // }
     }
+    // we are done reading the headers. There can be a body
     // Don't know if reading them is mandatory if we don't need them?
     // if there are incoming bytes available
-    // from the server, read them and print them:
-    while (client.available()) {
-      char c = client.read();
-      //Serial.write(c);
-    }
+    // from the server, read them
+    // while (!readTimeout && client.connected()) {
+    //   char c = client.read();
+    //   if (XUtils::isElapsedDelay(millis(), &startReadingResponse, RESPONSE_READ_TIMEOUT_MS)) {
+    //     Debug("Timeout while reading response body\n");
+    //     break;
+    //   }
+    //   if (XUtils::isElapsedDelay(millis(), &sinceLastYield, RESPONSE_READ_YIELD_PERIOD_MS)) {
+    //     yield();
+    //   }
+    // }
     client.stop();
     Serial.printf("HTTP response code %d\n", httpCode);
 
@@ -77,4 +107,8 @@ int XIOTHttps::sendToHttps(const char* method, const char* url, const char* payl
 
   free(urlCopy);
   return httpCode;
+}
+
+void XIOTHttps::yield() {
+  delay(0);
 }
