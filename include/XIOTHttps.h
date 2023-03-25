@@ -12,6 +12,8 @@
 #include <ESP8266HTTPClient.h>
 #include "XIOTModuleDebug.h"
 
+static const char request[] PROGMEM = "%s %s HTTP/1.1\nHost: %s\nContent-Type: application/json\nContent-Length: %d\nConnection: close\n\n%s";
+
 class XIOTHttps {
    public:
 

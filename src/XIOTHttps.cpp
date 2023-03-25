@@ -42,13 +42,20 @@ int XIOTHttps::sendToHttps(const char* method, const char* url, const char* payl
     Serial.println("Connection failed!");
   } else {
     Serial.println("Connected!");
-    client.printf("%s %s HTTP/1.1\n", method, url);
-    client.printf("Host: %s\n", host);
-    client.println("Content-Type: application/json");
-    client.printf("Content-Length: %d\n", strlen(payload));
-    client.println("Connection: close");
-    client.println();  
-    client.println(payload);
+
+    int maxSize = strlen_P(request) + strlen(method)  + strlen(url) + strlen(host) 
+                                             + strlen(payload) + 10 ;  
+
+    char* requestPayload = (char*)malloc(maxSize);
+    sprintf_P(requestPayload, request, method, url, host, strlen(payload), payload);
+    // Serial.println(requestPayload);
+    client.println(requestPayload);
+    free(requestPayload);
+
+// free(urlCopy);
+// client.stop();
+// return 200;
+
     // read output
     // First line is result:
     // HTTP/1.1 401 Unauthorized
@@ -101,7 +108,7 @@ int XIOTHttps::sendToHttps(const char* method, const char* url, const char* payl
     //   }
     // }
     client.stop();
-    Serial.printf("HTTP response code %d\n", httpCode);
+    Debug("HTTP response code %d\n", httpCode);
 
   }
 

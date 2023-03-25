@@ -49,17 +49,15 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   WiFi.mode(WIFI_OFF);  // Make sure reconnection will be handled properly after reset
   _config = config;
   firebase = new Firebase(config);
-  Serial.print("Initializing module: ");
-  Serial.println(config->getName());
-  Serial.print("Module type: ");
-  Serial.println(config->getType());
+  Debug("Initializing module: %s\n", config->getName());
+  Debug("Module type: %s\n", config->getType());
   #ifdef GIT_REV
-  Serial.printf("Version %s\n", GIT_REV);
+  Debug("Version %s\n", GIT_REV);
   #endif  
   // Initialise the OLED display
   _initDisplay(displayAddr, displaySda, displayScl, flipScreen, brightness);
   if(config->getUiClassName()[0] == 0) {
-    Serial.println("No uiClassName !!");
+    Debug("No uiClassName !!\n");
     _oledDisplay->setLine(2, "No uiClassName !", NOT_TRANSIENT, NOT_BLINKING);
     _oledDisplay->alertIconOn(true);
   }  
@@ -69,7 +67,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   addModuleEndpoints();
   
   NTP.onNTPSyncEvent([&](NTPSyncEvent_t event) {
-    Serial.printf("NTP event: %d\n", event);
+    Debug("NTP event: %d\n", event);
     _ntpEventToProcess = true;
     _ntpEvent = event;
   });
@@ -81,7 +79,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
     if(isWaitingOTA()) {
       waitForOta();
     } else {
-      Serial.printf("Got IP on %s: %s\n",_config->getSTASsid(), _localIP);
+      Debug("Got IP on %s: %s\n",_config->getSTASsid(), _localIP);
       _wifiConnected = true;
       _canQueryMasterConfig = true;
       _wifiDisplay();
@@ -106,7 +104,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
       } else if(strcmp(DEFAULT_XIOT_APPWD, _config->getXiotPwd()) != 0) {
        // If non autonomous, module is connected to the customized SSID, and it can register itself to master
        // it will get the current date time from master.
-        Serial.println("Non autonomous module ready to register");
+        Debug("Non autonomous module ready to register\n");
         _canRegister = true;
       }
       customOnStaGotIpHandler(ipInfo);
@@ -116,7 +114,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   _wifiSTADisconnectedHandler = WiFi.onStationModeDisconnected([&](WiFiEventStationModeDisconnected event) {
     // Continuously get messages, so just output once.
     if(_wifiConnected && !isWaitingOTA() ) {
-      Serial.printf("Lost connection to %s, error: %d\n", event.ssid.c_str(), event.reason);
+      Debug("Lost connection to %s, error: %d\n", event.ssid.c_str(), event.reason);
       _oledDisplay->setLine(1, "Disconnected", TRANSIENT, NOT_BLINKING);
       _connectSTA();
     }
@@ -196,7 +194,7 @@ void XIOTModule::addModuleEndpoints() {
   });
 
   _server->on("/api/moduleReset", HTTP_GET, [&](){
-    Serial.println("Rq on /api/moduleReset");
+    Debug("Rq on /api/moduleReset\n");
     _config->initFromDefault();
     _config->saveToEeprom();
     sendJson("{}", 200);   // HTTP code 200 is enough 
@@ -207,8 +205,7 @@ void XIOTModule::addModuleEndpoints() {
     String jsonBody = _server->arg("plain");
     if(forwardTo.length() != 0) { 
       int httpCode;   
-      Serial.print("Forwarding rename to ");
-      Serial.println(forwardTo);
+      Debug("Forwarding rename to %s\n", forwardTo);
       // TODO process error
       APIPost(forwardTo, "/api/rename", jsonBody, &httpCode, NULL, 0);
     } else {
@@ -241,8 +238,7 @@ void XIOTModule::addModuleEndpoints() {
     String forwardTo = _server->header("Xiot-forward-to");
     int httpCode;
     if(forwardTo.length() != 0) {    
-      Serial.print("Forwarding GET /api/data to ");
-      Serial.println(forwardTo);
+      Debug("Forwarding GET /api/data to %s\n", forwardTo);
       char message[1000];
       APIGet(forwardTo, "/api/data", &httpCode, message, 1000);
       if(httpCode == 200) {
@@ -271,8 +267,7 @@ void XIOTModule::addModuleEndpoints() {
     String forwardTo = _server->header("Xiot-forward-to");
     int httpCode;
     if(forwardTo.length() != 0) {    
-      Serial.print("Forwarding restart to ");
-      Serial.println(forwardTo);
+      Debug("Forwarding restart to %s\n", forwardTo);
       APIGet(forwardTo, "/api/restart", &httpCode, NULL, 0);
     } else {
       sendHtml("restarting", 200);
@@ -449,10 +444,10 @@ int XIOTModule::sendData(bool isResponse) {
   int httpCode = 200;
   char *payloadStr = _buildFullPayload();
   if(isResponse) {
-    Serial.printf("Response: %s\n", payloadStr);
+    Debug("Response: %s\n", payloadStr);
     sendJson(payloadStr, httpCode);
   } else {
-    Serial.printf("Payload: %s\n", payloadStr);
+    Debug("Payload: %s\n", payloadStr);
     masterAPIPost("/api/refresh", String(payloadStr), &httpCode, NULL, 0);
   }  
   free(payloadStr);
@@ -466,8 +461,7 @@ void XIOTModule::_processPostPut() {
   char *response = NULL;
   
   if(forwardTo.length() != 0) {    
-    Serial.print("Forwarding data to ");
-    Serial.println(forwardTo);
+    Debug("Forwarding data to %s\n", forwardTo);
     response = (char *)malloc(1000);
     *response = 0;
     APIPost(forwardTo, "/api/data", body, &httpCode, response, 1000);
@@ -746,7 +740,7 @@ void XIOTModule::APIGet(String ipAddr, const char* path, int* httpCode, char *js
   http.begin(ipAddr, 80, path);
   *httpCode = http.GET();
   if(*httpCode <= 0) {
-    Serial.printf("HTTP GET failed, error: %s\n", http.errorToString(*httpCode).c_str());
+    Debug("HTTP GET failed, error: %s\n", http.errorToString(*httpCode).c_str());
     return;
   }
   if(jsonString) {
@@ -787,7 +781,7 @@ void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* h
   http.begin(client, ipAddr, 80, path);
   *httpCode = http.POST(payload);
   if (*httpCode <= 0) {
-    Serial.printf("HTTP POST failed, error: %s\n", http.errorToString(*httpCode).c_str());
+    Debug("HTTP POST failed, error: %s\n", http.errorToString(*httpCode).c_str());
     if (response != NULL) {
       strlcpy(response, http.errorToString(*httpCode).c_str(), maxLen);
     }
@@ -795,7 +789,7 @@ void XIOTModule::APIPost(String ipAddr, const char* path, String payload, int* h
   }
   if (response != NULL) {
     int size = http.getSize();
-    Serial.printf("Response size is %d\n", size);
+    Debug("Response size is %d\n", size);
     String jsonResultStr = http.getString();
     jsonResultStr.toCharArray(response, size);
   }
@@ -853,11 +847,11 @@ int XIOTModule::startOTA(const char* ssid, const char* pwd) {
   _setupOTA();
   
   if(ssid != NULL && strlen(ssid) > 0) {
-    Serial.printf("SSID : %s\n", ssid);
+    Debug("SSID : %s\n", ssid);
     _oledDisplay->setLine(0, "Switching SSID for OTA", NOT_TRANSIENT, BLINKING);
     _oledDisplay->setLine(1, "Waiting for OTA", NOT_TRANSIENT, BLINKING);
     _oledDisplay->setLine(2, "", NOT_TRANSIENT, NOT_BLINKING);
-    Serial.printf("Connecting to %s\n", ssid);
+    Debug("Connecting to %s\n", ssid);
     WiFi.begin(ssid, pwd);    
   }
   return 200;
