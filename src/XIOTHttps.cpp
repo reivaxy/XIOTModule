@@ -39,15 +39,15 @@ int XIOTHttps::sendToHttps(const char* method, const char* url, const char* payl
   // Serial.printf("Host: %s\n", host);
   //delay(0);
   if (!client.connect(host, 443)) {
-    Serial.println("Connection failed!");
+    Serial.println(F("Connection failed!"));
   } else {
-    Serial.println("Connected!");
+    Serial.println(F("Connected!"));
 
-    int maxSize = strlen_P(request) + strlen(method)  + strlen(url) + strlen(host) 
+    int maxSize = strlen_P(REQUEST_FORMAT) + strlen(method)  + strlen(url) + strlen(host) 
                                              + strlen(payload) + 10 ;  
 
     char* requestPayload = (char*)malloc(maxSize);
-    sprintf_P(requestPayload, request, method, url, host, strlen(payload), payload);
+    sprintf_P(requestPayload, REQUEST_FORMAT, method, url, host, strlen(payload), payload);
     // Serial.println(requestPayload);
     client.println(requestPayload);
     free(requestPayload);

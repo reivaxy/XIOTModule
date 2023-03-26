@@ -17,6 +17,12 @@
 #include "XIOTHttps.h"
 #include "Message.h"
 
+static const char YEAR_FIRST_DATE_TIME_FORMAT[] PROGMEM = "%04d/%02d/%02dT%02d:%02d:%02d";
+static const char URL_FORMAT[] PROGMEM = "%s/%s.json";
+static const char PING_URL_FORMAT[] PROGMEM = "%s/ping.json";
+static const char MODULE_URL_FORMAT[] PROGMEM = "%s/module/%s.json";
+static const char URL_WITH_SECRET_FORMAT[] PROGMEM = "%s?auth=%s";
+
 #define MAX_DIFFERED_MESSAGES_COUNT 20
 #define HANDLE_DIFFERED_MESSAGES_DEFAULT_DELAY_MS 1000
 #define MAX_RETRY_MESSAGE_COUNT 10

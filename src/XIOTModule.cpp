@@ -123,7 +123,7 @@ XIOTModule::XIOTModule(ModuleConfigClass* config, int displayAddr, int displaySd
   WiFi.mode(WIFI_AP_STA);  
   uint8_t macAddr[6];
   WiFi.macAddress(macAddr);
-  sprintf(macAddrStr, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]);
+  sprintf_P(macAddrStr, MSG_MAC_ADDRESS, macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]);
   _connectSTA();
   _initSoftAP();
 }
@@ -134,7 +134,7 @@ ESP8266WebServer* XIOTModule::getServer() {
 
 void XIOTModule::waitForOta() {
   char message[30];
-  sprintf(message, "OTA ready: %s", _localIP);
+  sprintf_P(message, MSG_OTA_READY_IP, _localIP);
   _oledDisplay->setLine(0, message, NOT_TRANSIENT, NOT_BLINKING);
   ArduinoOTA.begin();    
 }
@@ -202,7 +202,7 @@ void XIOTModule::addModuleEndpoints() {
 
   _server->on("/api/rename", HTTP_POST, [&]() {
     String forwardTo = _server->header("Xiot-forward-to");   // when an agent can be a proxy to other agents
-    String jsonBody = _server->arg("plain");
+    String jsonBody = getServerArg(FPSTR(SERVER_ARG_PLAIN));
     if(forwardTo.length() != 0) { 
       int httpCode;   
       Debug("Forwarding rename to %s\n", forwardTo);
@@ -223,7 +223,7 @@ void XIOTModule::addModuleEndpoints() {
         _oledDisplay->setLine(1, "Renaming agent failed", TRANSIENT, NOT_BLINKING);
         return;
       }
-      sprintf(message, "Renaming agent to %s\n", (const char*)root["name"] ); 
+      sprintf_P(message, RENAMING_AGENT_TO, (const char*)root["name"] ); 
       _oledDisplay->setLine(1, message, TRANSIENT, NOT_BLINKING);
       _config->setName((const char*)root["name"]);
       _config->saveToEeprom(); // TODO: partial save !!   
@@ -282,7 +282,7 @@ void XIOTModule::addModuleEndpoints() {
     firebase->disable(); // don't send anything whil getting new firmware 
     if (!_config->getIsAutonomous()) {
 
-      String jsonBody = _server->arg("plain");
+      String jsonBody = getServerArg(FPSTR(SERVER_ARG_PLAIN));
       int httpCode = 200;
       _oledDisplay->init(); 
       _oledDisplay->setLineAlignment(2, TEXT_ALIGN_CENTER);
@@ -335,14 +335,14 @@ void XIOTModule::addModuleEndpoints() {
     int httpCode = 200;
 
     // Should module be autonomous ?
-    String autonomous = _server->arg("autonomous");
+    String autonomous = getServerArg(FPSTR(SERVER_ARG_AUTONOMOUS));
     if(strcmp(autonomous.c_str(), "on") == 0) {
       _config->setIsAutonomous(true);
     } else {
       _config->setIsAutonomous(false);
     }
     // Should module send pings ?
-    String ping = _server->arg("ping");
+    String ping = getServerArg(FPSTR(SERVER_ARG_PING));
     if(strcmp(ping.c_str(), "on") == 0) {
       _config->setSendFirebasePing(true);
     } else {
@@ -350,27 +350,27 @@ void XIOTModule::addModuleEndpoints() {
     }
 
     // only save module name if not empty
-    String name = _server->arg("name");
+    String name = getServerArg(FPSTR(SERVER_ARG_NAME));
     if (name.length() > 0) {
       Debug("Saving name\n");
       _config->setName(name.c_str());
     }
 
     // only save pushover user token if not empty
-    String poUser = _server->arg("poUser");
+    String poUser = getServerArg(FPSTR(SERVER_ARG_POUSER));
     if (poUser.length() > 0) {
       Debug("Saving poUser\n");
       _config->setPushoverUser(poUser.c_str());
     }
     // only save pushover app token if not empty
-    String poToken = _server->arg("poToken");
+    String poToken = getServerArg(FPSTR(SERVER_ARG_POTOKEN));
     if (poToken.length() > 0) {
       Debug("Saving poToken\n");
       _config->setPushoverToken(poToken.c_str());
     }
 
     // only save firebase url if not empty
-    String firebaseUrl = _server->arg("firebaseUrl");
+    String firebaseUrl = getServerArg(FPSTR(SERVER_ARG_FIREBASEURL));
     if (firebaseUrl.length() > 0) {
       Debug("Saving firebaseUrl\n");
       if (firebaseUrl.endsWith("/")) {
@@ -380,25 +380,25 @@ void XIOTModule::addModuleEndpoints() {
     }
 
     // only save firebase secret token if not empty
-    String firebaseSecret = _server->arg("firebaseSecret");
+    String firebaseSecret = getServerArg(FPSTR(SERVER_ARG_FIREBASESECRET));
     if (firebaseSecret.length() > 0) {
       Debug("Saving firebaseSecret\n");
       _config->setFirebaseSecretToken(firebaseSecret.c_str());
     }
 
     // only save a ssid if its password is given
-    String xiotPwd = _server->arg("xiotPwd");
+    String xiotPwd = getServerArg(FPSTR(SERVER_ARG_XIOTPASSWD));
     if (xiotPwd.length() > 0) {
-      String xiotSsid = _server->arg("xiotSsid");
+      String xiotSsid = getServerArg(FPSTR(SERVER_ARG_XIOTSSID));
       if (xiotSsid.length() > 0) {
         Debug("Saving Xiot SSID\n");
         _config->setXiotPwd(xiotPwd.c_str());
         _config->setXiotSsid(xiotSsid.c_str());
       }
     }
-    String boxPwd = _server->arg("boxPwd");
+    String boxPwd = getServerArg(FPSTR(SERVER_ARG_BOXPASSWD));
     if (boxPwd.length() > 0) {
-      String boxSsid = _server->arg("boxSsid");
+      String boxSsid = getServerArg(FPSTR(SERVER_ARG_BOXSSID));
       if (boxSsid.length() > 0) {
         Debug("Saving Box SSID\n");
         _config->setBoxPwd(boxPwd.c_str());
@@ -406,14 +406,14 @@ void XIOTModule::addModuleEndpoints() {
       }
     }
 
-    String timeOffset = _server->arg("timeOffset");
+    String timeOffset = getServerArg(FPSTR(SERVER_ARG_TIMEOFFSET));
     _config->setGmtOffset((int16_t)timeOffset.toInt());
     int offset = _config->getGmtMinOffset(); // minutes
     int hours = offset / 60;
     int minutes = offset - (hours * 60);
     NTP.setTimeZone(hours, minutes);
     
-    String brightness = _server->arg("brightness");
+    String brightness = getServerArg(FPSTR(SERVER_ARG_BRIGHTNESS));
     if (brightness.length() > 0) {
       uint8 level = (uint8_t)brightness.toInt();
       Debug("Setting brightness to %d\n", level);
@@ -433,6 +433,15 @@ void XIOTModule::addModuleEndpoints() {
 
   _server->begin();
 }    
+
+String XIOTModule::getServerArg(const __FlashStringHelper * str) {
+    int length = strlen_P((PGM_P)str);
+    char *argName = (char *)malloc(length + 1);
+    strcpy_P(argName, (PGM_P)str);
+    String value = _server->arg(argName);
+    free(argName);
+    return value;
+}
 
 void XIOTModule::setStackStart(char* stackStart) {
   XIOTModuleDebug::stackStart = stackStart;  
@@ -456,7 +465,7 @@ int XIOTModule::sendData(bool isResponse) {
 
 void XIOTModule::_processPostPut() {  
   String forwardTo = _server->header("Xiot-forward-to");
-  String body = _server->arg("plain");
+  String body = getServerArg(FPSTR(SERVER_ARG_PLAIN));
   int httpCode;
   char *response = NULL;
   
@@ -481,7 +490,7 @@ void XIOTModule::_processPostPut() {
 }
 
 void XIOTModule::_processSMS() {
-  String jsonBody = _server->arg("plain");
+  String jsonBody = getServerArg(FPSTR(SERVER_ARG_PLAIN));
   Serial.println(jsonBody); 
   const int bufferSize = JSON_OBJECT_SIZE(3) ; 
   StaticJsonBuffer<bufferSize> jsonBuffer;
@@ -817,7 +826,7 @@ void XIOTModule::_setupOTA() {
     if(progress == total) {
       _oledDisplay->setLine(1, "Flashing...", NOT_TRANSIENT, BLINKING);
     }
-    sprintf(message, "Progress: %u%%", (progress / (total / 100)));
+    sprintf_P(message, MSG_OTA_PROGRESS, (progress / (total / 100)));
     _oledDisplay->setLine(2, message, NOT_TRANSIENT, NOT_BLINKING);
   
     _oledDisplay->refresh();
@@ -825,14 +834,14 @@ void XIOTModule::_setupOTA() {
   ArduinoOTA.onError([&](ota_error_t error) {
     char msgErr[50];
 
-    sprintf(msgErr, "OTA Error[%u]: ", error);
+    sprintf_P(msgErr, MSG_OTA_ERROR, error);
     _oledDisplay->setLine(1, msgErr, NOT_TRANSIENT, BLINKING);
      
-    if (error == OTA_AUTH_ERROR) sprintf(msgErr,"Auth Failed");
-    else if (error == OTA_BEGIN_ERROR) sprintf(msgErr,"Begin Failed");
-    else if (error == OTA_CONNECT_ERROR) sprintf(msgErr,"Connect Failed");
-    else if (error == OTA_RECEIVE_ERROR) sprintf(msgErr,"Receive Failed");
-    else if (error == OTA_END_ERROR) sprintf(msgErr,"End Failed");
+    if (error == OTA_AUTH_ERROR) sprintf_P(msgErr, MSG_OTA_AUTH_FAILED_ERROR);
+    else if (error == OTA_BEGIN_ERROR) sprintf_P(msgErr, MSG_OTA_BEGIN_FAILED_ERROR);
+    else if (error == OTA_CONNECT_ERROR) sprintf_P(msgErr, MSG_OTA_CONNECT_FAILED_ERROR);
+    else if (error == OTA_RECEIVE_ERROR) sprintf_P(msgErr, MSG_OTA_RECEIVE_FAILED_ERROR);
+    else if (error == OTA_END_ERROR) sprintf_P(msgErr, MSG_OTA_END_FAILED_ERROR);
     _oledDisplay->setLine(1, msgErr, NOT_TRANSIENT, NOT_BLINKING);
   });
 }
@@ -876,7 +885,7 @@ void XIOTModule::_timeDisplay() {
     int mo = month();
     int y= year();
     char message[30];
-    sprintf(message, "%02d:%02d:%02d %02d/%02d/%04d", h, mi, s, d, mo, y);
+    sprintf_P(message, DATE_TIME_FORMAT, h, mi, s, d, mo, y);
     _oledDisplay->refreshDateTime(message);
   }
 }
@@ -891,13 +900,13 @@ void XIOTModule::_wifiDisplay() {
 
   if (_config->getIsAutonomous()) {
     // Display IP on AP SSID 
-    sprintf(message, "%s (%s)", WiFi.softAPIP().toString().c_str(), _config->getXiotSsid());
+    sprintf_P(message, IP_SSID_FORMAT, WiFi.softAPIP().toString().c_str(), _config->getXiotSsid());
   } else {
-    sprintf(message, "Connecting to %s", _config->getXiotSsid());
+    sprintf_P(message, CONNECTING_SSID_FORMAT, _config->getXiotSsid());
   }
   // If autonomous but connected to box, only keep box ssid / ip on display
   if(_wifiConnected) {
-    sprintf(message, "%s (%s)", _localIP,_config->getSTASsid());
+    sprintf_P(message, IP_SSID_FORMAT, _localIP,_config->getSTASsid());
   }
   _oledDisplay->setLine(0, message);
 
@@ -945,7 +954,7 @@ void XIOTModule::loop() {
   if(isWaitingOTA()) {  
     int remainingTime = 180 - ((millis() - _otaReadyTime) / 1000);
     char remainingTimeMsg[10];
-    sprintf(remainingTimeMsg, "%d", remainingTime);
+    sprintf_P(remainingTimeMsg, INT_FORMAT, remainingTime);
     _oledDisplay->setLine(4, remainingTimeMsg);
     // If waiting for OTA for more than 3mn but not started, restart (cancel OTA)
     if(!_otaIsStarted && ( remainingTime <= 0)) {

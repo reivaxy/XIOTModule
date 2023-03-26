@@ -93,7 +93,7 @@ void Firebase::differRecord(MessageType type, JsonObject* jsonBufferRoot) {
 int Firebase::sendEvent(const char* type, const char* logMessage) {
   Debug("Firebase::sendEvent char*, char*\n");
   char url[URL_MAX_LENGTH_WITHOUT_SECRET];
-  sprintf(url, "%s/%s.json", config->getFirebaseUrl(), type);
+  sprintf_P(url, URL_FORMAT, config->getFirebaseUrl(), type);
 
   // If the message string contains Json, send it as it is
   if (strncmp(logMessage, "{\"", 2) == 0) {
@@ -114,7 +114,7 @@ char* Firebase::getDateStr() {
   int d = day();
   int mo = month();
   int y= year();
-  sprintf(date, "%04d/%02d/%02dT%02d:%02d:%02d", y, mo, d, h, mi, s);
+  sprintf_P(date, YEAR_FIRST_DATE_TIME_FORMAT, y, mo, d, h, mi, s);
   return date;
 }
 
@@ -147,7 +147,7 @@ int Firebase::sendToFirebase(const char* method, const char* url, const char* pa
   const char *token = config->getFirebaseSecretToken();
   // to disable token usage, set it to small dummy string
   if (strlen(token) > 10) {
-    sprintf(urlWithSecret, "%s?auth=%s", url, token);
+    sprintf_P(urlWithSecret, URL_WITH_SECRET_FORMAT, url, token);
   } else {
     strcpy(urlWithSecret, url);
   }
@@ -236,12 +236,12 @@ void Firebase::handleDifferedMessages() {
       break;
 
     case MESSAGE_PING:
-      sprintf(url, "%s/ping.json", config->getFirebaseUrl());    
+      sprintf_P(url, PING_URL_FORMAT, config->getFirebaseUrl());    
       httpCode = sendToFirebase("POST", url, differedMessages[0]->message);
       break;
 
     case MESSAGE_MODULE:
-      sprintf(url, "%s/module/%s.json", config->getFirebaseUrl(), macAddrStr);    
+      sprintf_P(url, MODULE_URL_FORMAT, config->getFirebaseUrl(), macAddrStr);    
       httpCode = sendToFirebase("PUT", url, differedMessages[0]->message);
       break;
 

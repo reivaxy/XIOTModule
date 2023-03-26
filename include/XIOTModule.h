@@ -24,6 +24,37 @@
 #include <NtpClientLib.h>
 #include "Firebase.h"
 
+// Try to minimise RAM size and fragmentation
+static const char MSG_OTA_READY_IP[] PROGMEM = "OTA ready: %s";
+static const char MSG_MAC_ADDRESS[] PROGMEM = "%02x:%02x:%02x:%02x:%02x:%02x";
+static const char MSG_OTA_PROGRESS[] PROGMEM = "Progress: %u%%";
+static const char MSG_OTA_ERROR[] PROGMEM = "OTA Error[%u]: ";
+static const char MSG_OTA_AUTH_FAILED_ERROR[] PROGMEM = "Auth Failed";
+static const char MSG_OTA_BEGIN_FAILED_ERROR[] PROGMEM = "Begin Failed";
+static const char MSG_OTA_CONNECT_FAILED_ERROR[] PROGMEM = "Connect Failed";
+static const char MSG_OTA_RECEIVE_FAILED_ERROR[] PROGMEM = "Receive Failed";
+static const char MSG_OTA_END_FAILED_ERROR[] PROGMEM = "End Failed";
+
+static const char RENAMING_AGENT_TO[] PROGMEM = "Renaming agent to %s\n";
+static const char DATE_TIME_FORMAT[] PROGMEM = "%02d:%02d:%02d %02d/%02d/%04d";
+static const char IP_SSID_FORMAT[] PROGMEM = "%s (%s)";
+static const char CONNECTING_SSID_FORMAT[] PROGMEM = "Connecting to %s";
+static const char INT_FORMAT[] PROGMEM = "%d";
+
+static const char SERVER_ARG_PLAIN[] PROGMEM = "plain";
+static const char SERVER_ARG_AUTONOMOUS[] PROGMEM = "autonomous";
+static const char SERVER_ARG_PING[] PROGMEM = "ping";
+static const char SERVER_ARG_NAME[] PROGMEM = "name";
+static const char SERVER_ARG_POUSER[] PROGMEM = "poUser";
+static const char SERVER_ARG_POTOKEN[] PROGMEM = "poToken";
+static const char SERVER_ARG_FIREBASEURL[] PROGMEM = "firebaseUrl";
+static const char SERVER_ARG_FIREBASESECRET[] PROGMEM = "firebaseSecret";
+static const char SERVER_ARG_XIOTPASSWD[] PROGMEM = "xiotPwd";
+static const char SERVER_ARG_XIOTSSID[] PROGMEM = "xiotSsid";
+static const char SERVER_ARG_BOXPASSWD[] PROGMEM = "boxPwd";
+static const char SERVER_ARG_BOXSSID[] PROGMEM = "boxSsid";
+static const char SERVER_ARG_TIMEOFFSET[] PROGMEM = "timeOffset";
+static const char SERVER_ARG_BRIGHTNESS[] PROGMEM = "brightness";
 
 // Max length authorized for modules custom data
 #define MAX_GLOBAL_STATUS_SIZE 30
@@ -91,6 +122,7 @@ public:
   virtual char* customPageInitPage();
   virtual int customSaveConfig();
 
+
   virtual bool customProcessSMS(const char* phoneNumber, const bool isAdmin, const char* message);
   virtual int sendData(bool isResponse);
   virtual void _timeDisplay();
@@ -134,6 +166,7 @@ public:
   bool isTimeInitialized();
   int sendPushNotif(const char* title, const char* message);
   void sendModuleInfo();
+  String getServerArg(const __FlashStringHelper * str);
 
   Firebase* firebase = NULL;
 
