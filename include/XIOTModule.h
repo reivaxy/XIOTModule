@@ -9,6 +9,7 @@
 
 #include "XIOTModuleDebug.h"
 #include <XIOTConfig.h>
+#include <XUtils.h>
 #include <WString.h>
 #include <pgmspace.h>
 #include <XIOTDisplay.h>
@@ -24,7 +25,7 @@
 #include <NtpClientLib.h>
 #include "Firebase.h"
 
-// Try to minimise RAM size and fragmentation
+// Try to minimise RAM size and fragmentation: store as many strings as possible in PROGMEM
 static const char MSG_OTA_READY_IP[] PROGMEM = "OTA ready: %s";
 static const char MSG_MAC_ADDRESS[] PROGMEM = "%02x:%02x:%02x:%02x:%02x:%02x";
 static const char MSG_OTA_PROGRESS[] PROGMEM = "Progress: %u%%";
@@ -34,6 +35,13 @@ static const char MSG_OTA_BEGIN_FAILED_ERROR[] PROGMEM = "Begin Failed";
 static const char MSG_OTA_CONNECT_FAILED_ERROR[] PROGMEM = "Connect Failed";
 static const char MSG_OTA_RECEIVE_FAILED_ERROR[] PROGMEM = "Receive Failed";
 static const char MSG_OTA_END_FAILED_ERROR[] PROGMEM = "End Failed";
+
+static const char MSG_RESTARTING[] PROGMEM = "restarting";
+static const char MSG_OTA_READY[] PROGMEM = "Ready for OTA";
+static const char MSG_CONFIG_SAVED[] PROGMEM = "Config saved";
+
+static const char JSON_EMPTY[] PROGMEM = "{}";
+
 
 static const char RENAMING_AGENT_TO[] PROGMEM = "Renaming agent to %s\n";
 static const char DATE_TIME_FORMAT[] PROGMEM = "%02d:%02d:%02d %02d/%02d/%04d";
@@ -55,6 +63,14 @@ static const char SERVER_ARG_BOXPASSWD[] PROGMEM = "boxPwd";
 static const char SERVER_ARG_BOXSSID[] PROGMEM = "boxSsid";
 static const char SERVER_ARG_TIMEOFFSET[] PROGMEM = "timeOffset";
 static const char SERVER_ARG_BRIGHTNESS[] PROGMEM = "brightness";
+
+static const char SERVER_HEADER_FORWARD[] PROGMEM = "Xiot-forward-to";
+static const char SERVER_HEADER_CONNECTION[] PROGMEM = "Connection";
+static const char SERVER_HEADER_CONNECTION_VALUE_CLOSE[] PROGMEM = "close";
+static const char SERVER_HEADER_CONTENTTYPE_VALUE_HTML[] PROGMEM = "text/html; charset=utf-8";
+static const char SERVER_HEADER_CONTENTTYPE_VALUE_JSON[] PROGMEM = "application/json";
+static const char SERVER_HEADER_CONTENTTYPE_VALUE_TEXT[] PROGMEM = "text/plain";
+
 
 // Max length authorized for modules custom data
 #define MAX_GLOBAL_STATUS_SIZE 30
@@ -147,8 +163,12 @@ public:
   void APIPost(char *ipAddr, const char* path, String payload, int* httpCode, char *jsonString, int maxLen);  
   void APIPost(String ipAddr, const char* path, String payload, int* httpCode);  
   void sendText(const char* msg, int code);
+  void sendText(const __FlashStringHelper * str, int code);
   void sendHtml(const char* msg, int code);
+  void sendHtml(const __FlashStringHelper * str, int code);
   void sendJson(const char* msg, int code);
+  void sendJson(const __FlashStringHelper * str, int code);
+  void sendEmptyJson(int code);
   void hideDateTime(bool);
   void addModuleEndpoints();
   bool isWaitingOTA();
@@ -167,6 +187,8 @@ public:
   int sendPushNotif(const char* title, const char* message);
   void sendModuleInfo();
   String getServerArg(const __FlashStringHelper * str);
+  String getServerForwardHeader();
+  void sendConnectionClose();
 
   Firebase* firebase = NULL;
 

@@ -197,11 +197,11 @@ void XIOTModule::addModuleEndpoints() {
     Debug("Rq on /api/moduleReset\n");
     _config->initFromDefault();
     _config->saveToEeprom();
-    sendJson("{}", 200);   // HTTP code 200 is enough 
+    sendEmptyJson(200);   // HTTP code 200 is enough 
   });
 
   _server->on("/api/rename", HTTP_POST, [&]() {
-    String forwardTo = _server->header("Xiot-forward-to");   // when an agent can be a proxy to other agents
+    String forwardTo = getServerForwardHeader();   // when an agent can be a proxy to other agents
     String jsonBody = getServerArg(FPSTR(SERVER_ARG_PLAIN));
     if(forwardTo.length() != 0) { 
       int httpCode;   
@@ -219,7 +219,7 @@ void XIOTModule::addModuleEndpoints() {
       StaticJsonBuffer<bufferSize> jsonBuffer; 
       JsonObject& root = jsonBuffer.parseObject(jsonBody); 
       if (!root.success()) {
-        sendJson("{}", 500);
+        sendEmptyJson(500);
         _oledDisplay->setLine(1, "Renaming agent failed", TRANSIENT, NOT_BLINKING);
         return;
       }
@@ -229,13 +229,13 @@ void XIOTModule::addModuleEndpoints() {
       _config->saveToEeprom(); // TODO: partial save !!   
       _oledDisplay->setTitle(_config->getName());
     }    
-    sendJson("{}", 200);   // HTTP code 200 is enough
+    sendEmptyJson(200);   // HTTP code 200 is enough
   });
 
   // Return this module's custom data if any
   // Almost like ping request except for heap size. Is it worth it ? Could be exact same... 
   _server->on("/api/data", HTTP_GET, [&]() {
-    String forwardTo = _server->header("Xiot-forward-to");
+    String forwardTo = getServerForwardHeader();
     int httpCode;
     if(forwardTo.length() != 0) {    
       Debug("Forwarding GET /api/data to %s\n", forwardTo);
@@ -264,13 +264,13 @@ void XIOTModule::addModuleEndpoints() {
   });
       
   _server->on("/api/restart", HTTP_GET, [&](){
-    String forwardTo = _server->header("Xiot-forward-to");
+    String forwardTo = getServerForwardHeader();
     int httpCode;
     if(forwardTo.length() != 0) {    
       Debug("Forwarding restart to %s\n", forwardTo);
       APIGet(forwardTo, "/api/restart", &httpCode, NULL, 0);
     } else {
-      sendHtml("restarting", 200);
+      sendHtml(FPSTR(MSG_RESTARTING), 200);
       delay(300);
       ESP.reset();     
     }
@@ -291,18 +291,18 @@ void XIOTModule::addModuleEndpoints() {
       StaticJsonBuffer<bufferSize> jsonBuffer;   
       JsonObject& root = jsonBuffer.parseObject(jsonBody); 
       if (!root.success()) {
-        sendJson("{}", 500);
+        sendEmptyJson(500);
         _oledDisplay->setLine(1, "Ota setup failed", TRANSIENT, NOT_BLINKING);
         return;
       }
       const char* ssidp = (const char*)root[XIOTModuleJsonTag::ssid];
       const char* pwdp = (const char*)root[XIOTModuleJsonTag::pwd];
       httpCode = startOTA(ssidp, pwdp);
-      sendJson("{}", httpCode); // send reply before disconnecting/reconnecting.     
+      sendEmptyJson(httpCode); // send reply before disconnecting/reconnecting.     
     } else {
       httpCode = startOTA(NULL, NULL);
       waitForOta();
-      sendHtml("Ready for OTA", httpCode);
+      sendHtml(FPSTR(MSG_OTA_READY), httpCode);
     }
   });
 
@@ -424,7 +424,7 @@ void XIOTModule::addModuleEndpoints() {
     customSaveConfig();
     firebase->differMessage(MESSAGE_LOG, MSG_LOG_CONFIG_UPDATED);
     _config->saveToEeprom();
-    sendHtml("Config saved", httpCode);
+    sendHtml(FPSTR(MSG_CONFIG_SAVED), httpCode);
 
     MemSize("endinging save config");
     delay(1000);
@@ -434,10 +434,15 @@ void XIOTModule::addModuleEndpoints() {
   _server->begin();
 }    
 
+String XIOTModule::getServerForwardHeader() {
+    char *headerName = XUtils::progmemToMalloc(FPSTR(SERVER_HEADER_FORWARD));
+    String value = _server->header(headerName);
+    free(headerName);
+    return value;
+}   
+
 String XIOTModule::getServerArg(const __FlashStringHelper * str) {
-    int length = strlen_P((PGM_P)str);
-    char *argName = (char *)malloc(length + 1);
-    strcpy_P(argName, (PGM_P)str);
+    char *argName = XUtils::progmemToMalloc(str);
     String value = _server->arg(argName);
     free(argName);
     return value;
@@ -464,7 +469,7 @@ int XIOTModule::sendData(bool isResponse) {
 }
 
 void XIOTModule::_processPostPut() {  
-  String forwardTo = _server->header("Xiot-forward-to");
+  String forwardTo = getServerForwardHeader();
   String body = getServerArg(FPSTR(SERVER_ARG_PLAIN));
   int httpCode;
   char *response = NULL;
@@ -496,7 +501,7 @@ void XIOTModule::_processSMS() {
   StaticJsonBuffer<bufferSize> jsonBuffer;
   JsonObject& root = jsonBuffer.parseObject(const_cast<char*>(jsonBody.c_str())); 
   if (!root.success()) {
-    sendJson("{}", 500);
+    sendEmptyJson(500);
     _oledDisplay->setLine(1, "SMS bad payload", TRANSIENT, NOT_BLINKING);
     return;
   }
@@ -917,19 +922,57 @@ void XIOTModule::_wifiDisplay() {
   _oledDisplay->wifiIcon(blinkWifi, wifiType);
 }
 
+void XIOTModule::sendHtml(const __FlashStringHelper * str, int code) {
+  char* msg = XUtils::progmemToMalloc(str);
+  sendHtml(msg, code);
+  free(msg);
+}
+
 void XIOTModule::sendHtml(const char* html, int code) {
-  _server->sendHeader("Connection", "close");
-  // _server->sendHeader("Content-Type", "text/html; charset=utf-8");
-  _server->send(code, "text/html; charset=utf-8", html);
+  sendConnectionClose();
+  char* contentType = XUtils::progmemToMalloc(FPSTR(SERVER_HEADER_CONTENTTYPE_VALUE_HTML));
+  _server->send(code, contentType, html);
+  free(contentType);
+}
+
+void XIOTModule::sendJson(const __FlashStringHelper * str, int code) {
+  char* jsonText = XUtils::progmemToMalloc(str);
+  sendJson(jsonText, code);
+  free(jsonText);
+}
+
+void XIOTModule::sendEmptyJson(int code) {
+  char* jsonText = XUtils::progmemToMalloc(FPSTR(JSON_EMPTY));
+  sendJson(jsonText, code);
+  free(jsonText);
 }
 
 void XIOTModule::sendJson(const char* jsonText, int code) {
-  _server->sendHeader("Connection", "close");
-  _server->send(code, "application/json", jsonText);
+  sendConnectionClose();
+  char* contentType = XUtils::progmemToMalloc(FPSTR(SERVER_HEADER_CONTENTTYPE_VALUE_JSON));
+  _server->send(code, contentType, jsonText);
+  free(contentType);
 }
+
+void XIOTModule::sendText(const __FlashStringHelper * str, int code) {
+  char* msg = XUtils::progmemToMalloc(str);
+  sendText(msg, code);
+  free(msg);
+}
+
 void XIOTModule::sendText(const char* msg, int code) {
-  _server->sendHeader("Connection", "close");
-  _server->send(code, "text/plain", msg);
+  sendConnectionClose();
+  char* contentType = XUtils::progmemToMalloc(FPSTR(SERVER_HEADER_CONTENTTYPE_VALUE_TEXT));
+  _server->send(code, contentType, msg);
+  free(contentType);
+}
+
+void XIOTModule::sendConnectionClose() {
+  char* connection = XUtils::progmemToMalloc(FPSTR(SERVER_HEADER_CONNECTION));
+  char* close = XUtils::progmemToMalloc(FPSTR(SERVER_HEADER_CONNECTION_VALUE_CLOSE));
+  _server->sendHeader(connection, close);
+  free(connection);
+  free(close);
 }
 
 
